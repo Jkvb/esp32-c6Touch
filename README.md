@@ -612,3 +612,11 @@ En ambas puedes:
 
 Si el blanco se ve magenta en ST7789, se ajustó el orden de color del panel a **BGR** en el driver.
 Además, el reloj ahora cambia color dinámicamente para confirmar que el pipeline de color está bien.
+
+
+### UI estilo matriz (nuevo)
+
+- Fondo principal ahora en **negro**.
+- Hora en **verde dinámico** (efecto tipo matriz).
+- `wichIA` se muestra en una etiqueta separada y **más pequeña**.
+- El acelerómetro desplaza sutilmente la hora y ajusta el brillo verde del fondo.

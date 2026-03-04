@@ -15,7 +15,8 @@
 
 static const char *TAG_UI = "UI_CLOCK";
 
-static lv_obj_t *s_lbl = NULL;
+static lv_obj_t *s_brand_lbl = NULL;
+static lv_obj_t *s_time_lbl = NULL;
 static volatile int16_t s_ax = 0;
 static volatile int16_t s_ay = 0;
 static volatile bool s_accel_valid = false;
@@ -46,6 +47,15 @@ static int16_t clamp16(int32_t v, int16_t min, int16_t max)
     if (v < min) return min;
     if (v > max) return max;
     return (int16_t)v;
+}
+
+static void style_btn_matrix(lv_obj_t *btn)
+{
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x001a00), 0);
+    lv_obj_set_style_border_color(btn, lv_color_hex(0x00ff66), 0);
+    lv_obj_set_style_border_width(btn, 1, 0);
+    lv_obj_set_style_shadow_width(btn, 0, 0);
+    lv_obj_set_style_text_color(btn, lv_color_hex(0x00ff66), 0);
 }
 
 static void hide_all_overlays(void)
@@ -96,27 +106,34 @@ static void clock_timer_cb(lv_timer_t *t)
     time(&now);
     localtime_r(&now, &ti);
 
-    char buf[40];
+    char buf[16];
     if (ti.tm_year < (2024 - 1900)) {
-        snprintf(buf, sizeof(buf), "wichIA\n--:--:--");
+        snprintf(buf, sizeof(buf), "--:--:--");
     } else {
-        snprintf(buf, sizeof(buf), "wichIA\n%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
+        snprintf(buf, sizeof(buf), "%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
     }
-    lv_label_set_text(s_lbl, buf);
+    lv_label_set_text(s_time_lbl, buf);
 
     uint8_t sec = (uint8_t)ti.tm_sec;
-    uint8_t r = (uint8_t)(120 + (sec * 7) % 120);
-    uint8_t g = (uint8_t)(120 + (sec * 5) % 120);
-    uint8_t b = (uint8_t)(120 + (sec * 3) % 120);
-    lv_obj_set_style_text_color(s_lbl, lv_color_make(r, g, b), 0);
+    uint8_t green = (uint8_t)(140 + (sec * 2) % 110);
+    uint8_t red = (uint8_t)(10 + (sec % 20));
+    lv_color_t matrix = lv_color_make(red, green, 20);
+    lv_obj_set_style_text_color(s_time_lbl, matrix, 0);
+    lv_obj_set_style_text_color(s_brand_lbl, lv_color_make(20, (uint8_t)(green - 40), 20), 0);
 
     if (s_accel_valid) {
-        int16_t xoff = clamp16((int32_t)s_ax / 500, -50, 50);
-        int16_t yoff = clamp16((int32_t)(-s_ay) / 500, -70, 70);
-        lv_obj_align(s_lbl, LV_ALIGN_CENTER, xoff, yoff);
+        int16_t xoff = clamp16((int32_t)s_ax / 450, -45, 45);
+        int16_t yoff = clamp16((int32_t)(-s_ay) / 450, -45, 45);
+        lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, xoff, yoff + 6);
+        lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, xoff / 2, 22);
 
-        uint8_t blue = (uint8_t)clamp16(80 + (s_ax > 0 ? s_ax : -s_ax) / 100, 40, 220);
-        lv_obj_set_style_bg_color(lv_screen_active(), lv_color_make(20, 40, blue), 0);
+        int32_t amp = ((s_ax >= 0) ? s_ax : -s_ax) + ((s_ay >= 0) ? s_ay : -s_ay);
+        uint8_t glow = (uint8_t)clamp16(20 + amp / 90, 10, 100);
+        lv_obj_set_style_bg_color(lv_screen_active(), lv_color_make(0, glow, 0), 0);
+    } else {
+        lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
+        lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 22);
+        lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x000000), 0);
     }
 }
 
@@ -242,20 +259,27 @@ void ui_clock_create(void)
     lv_obj_t *scr = lv_screen_active();
 
     ESP_LOGI(TAG_UI, "ui_clock_create init");
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x002060), 0);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_add_event_cb(scr, screen_gesture_open_cb, LV_EVENT_GESTURE, NULL);
 
-    s_lbl = lv_label_create(scr);
-    lv_label_set_text(s_lbl, "wichIA\n--:--:--");
-    lv_obj_set_style_text_font(s_lbl, CLOCK_FONT, 0);
-    lv_obj_set_style_text_color(s_lbl, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_align(s_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_center(s_lbl);
+    s_brand_lbl = lv_label_create(scr);
+    lv_label_set_text(s_brand_lbl, "wichIA");
+    lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x00cc44), 0);
+    lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
+    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 22);
+
+    s_time_lbl = lv_label_create(scr);
+    lv_label_set_text(s_time_lbl, "--:--:--");
+    lv_obj_set_style_text_font(s_time_lbl, CLOCK_FONT, 0);
+    lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x00ff66), 0);
+    lv_obj_set_style_text_align(s_time_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
 
     lv_obj_t *btn_open = lv_button_create(scr);
     lv_obj_set_size(btn_open, 36, 36);
     lv_obj_align(btn_open, LV_ALIGN_RIGHT_MID, -4, 0);
+    style_btn_matrix(btn_open);
     lv_obj_add_event_cb(btn_open, btn_open_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *open_lbl = lv_label_create(btn_open);
     lv_label_set_text(open_lbl, "W");
@@ -266,6 +290,7 @@ void ui_clock_create(void)
     lv_obj_align(btn_swipe_hint, LV_ALIGN_RIGHT_MID, 0, 0);
     lv_obj_set_style_bg_opa(btn_swipe_hint, LV_OPA_40, 0);
     lv_obj_set_style_radius(btn_swipe_hint, 0, 0);
+    style_btn_matrix(btn_swipe_hint);
     lv_obj_add_event_cb(btn_swipe_hint, btn_open_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *hint_lbl = lv_label_create(btn_swipe_hint);
     lv_label_set_text(hint_lbl, "≡");
@@ -277,6 +302,7 @@ void ui_clock_create(void)
     lv_obj_set_style_bg_color(s_drawer, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(s_drawer, LV_OPA_50, 0);
     lv_obj_set_style_border_width(s_drawer, 0, 0);
+    lv_obj_set_style_border_color(s_drawer, lv_color_hex(0x00ff66), 0);
 
     s_menu_card = lv_obj_create(s_drawer);
     lv_obj_set_size(s_menu_card, 228, 282);
@@ -290,6 +316,7 @@ void ui_clock_create(void)
     lv_obj_t *btn_close = lv_button_create(s_menu_card);
     lv_obj_set_size(btn_close, 34, 28);
     lv_obj_align(btn_close, LV_ALIGN_TOP_RIGHT, -8, 6);
+    style_btn_matrix(btn_close);
     lv_obj_add_event_cb(btn_close, btn_close_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *close_lbl = lv_label_create(btn_close);
     lv_label_set_text(close_lbl, "X");
@@ -307,6 +334,7 @@ void ui_clock_create(void)
     lv_obj_t *btn_wifi_app = lv_button_create(s_home_page);
     lv_obj_set_size(btn_wifi_app, 92, 92);
     lv_obj_align(btn_wifi_app, LV_ALIGN_TOP_LEFT, 4, 24);
+    style_btn_matrix(btn_wifi_app);
     lv_obj_add_event_cb(btn_wifi_app, btn_wifi_app_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *wifi_app_lbl = lv_label_create(btn_wifi_app);
     lv_label_set_text(wifi_app_lbl, LV_SYMBOL_WIFI "\nWiFi");
@@ -315,6 +343,7 @@ void ui_clock_create(void)
     lv_obj_t *btn_clock_app = lv_button_create(s_home_page);
     lv_obj_set_size(btn_clock_app, 92, 92);
     lv_obj_align(btn_clock_app, LV_ALIGN_TOP_RIGHT, -4, 24);
+    style_btn_matrix(btn_clock_app);
     lv_obj_add_event_cb(btn_clock_app, btn_close_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *clock_app_lbl = lv_label_create(btn_clock_app);
     lv_label_set_text(clock_app_lbl, LV_SYMBOL_HOME "\nReloj");
@@ -338,6 +367,7 @@ void ui_clock_create(void)
     lv_obj_t *btn_scan = lv_button_create(s_wifi_page);
     lv_obj_set_size(btn_scan, 56, 26);
     lv_obj_align(btn_scan, LV_ALIGN_TOP_RIGHT, -2, 24);
+    style_btn_matrix(btn_scan);
     lv_obj_add_event_cb(btn_scan, btn_scan_wifi_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *scan_lbl = lv_label_create(btn_scan);
     lv_label_set_text(scan_lbl, "Scan");
@@ -346,6 +376,7 @@ void ui_clock_create(void)
     lv_obj_t *btn_back = lv_button_create(s_wifi_page);
     lv_obj_set_size(btn_back, 56, 26);
     lv_obj_align(btn_back, LV_ALIGN_TOP_RIGHT, -2, -2);
+    style_btn_matrix(btn_back);
     lv_obj_add_event_cb(btn_back, btn_back_home_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *back_lbl = lv_label_create(btn_back);
     lv_label_set_text(back_lbl, "Apps");
@@ -367,6 +398,7 @@ void ui_clock_create(void)
     lv_obj_t *btn_save = lv_button_create(s_wifi_page);
     lv_obj_set_size(btn_save, 94, 34);
     lv_obj_align(btn_save, LV_ALIGN_BOTTOM_LEFT, 4, -8);
+    style_btn_matrix(btn_save);
     lv_obj_add_event_cb(btn_save, btn_save_drawer_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *save_lbl = lv_label_create(btn_save);
     lv_label_set_text(save_lbl, "Guardar");
@@ -375,6 +407,7 @@ void ui_clock_create(void)
     lv_obj_t *btn_cancel = lv_button_create(s_wifi_page);
     lv_obj_set_size(btn_cancel, 94, 34);
     lv_obj_align(btn_cancel, LV_ALIGN_BOTTOM_RIGHT, -4, -8);
+    style_btn_matrix(btn_cancel);
     lv_obj_add_event_cb(btn_cancel, btn_close_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *cancel_lbl = lv_label_create(btn_cancel);
     lv_label_set_text(cancel_lbl, "Cerrar");
@@ -383,9 +416,10 @@ void ui_clock_create(void)
     /* Swipe full-screen WiFi page */
     s_swipe_wifi = lv_obj_create(scr);
     lv_obj_set_size(s_swipe_wifi, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(s_swipe_wifi, lv_color_hex(0x10131a), 0);
+    lv_obj_set_style_bg_color(s_swipe_wifi, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(s_swipe_wifi, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(s_swipe_wifi, 0, 0);
+    lv_obj_set_style_border_color(s_swipe_wifi, lv_color_hex(0x00ff66), 0);
 
     lv_obj_t *sw_title = lv_label_create(s_swipe_wifi);
     lv_label_set_text(sw_title, LV_SYMBOL_WIFI " WiFi rapido (Swipe)");
@@ -404,6 +438,7 @@ void ui_clock_create(void)
     lv_obj_t *sw_scan = lv_button_create(s_swipe_wifi);
     lv_obj_set_size(sw_scan, 62, 30);
     lv_obj_align(sw_scan, LV_ALIGN_TOP_RIGHT, -12, 54);
+    style_btn_matrix(sw_scan);
     lv_obj_add_event_cb(sw_scan, btn_scan_wifi_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *sw_scan_lbl = lv_label_create(sw_scan);
     lv_label_set_text(sw_scan_lbl, "Scan");
@@ -425,6 +460,7 @@ void ui_clock_create(void)
     lv_obj_t *sw_save = lv_button_create(s_swipe_wifi);
     lv_obj_set_size(sw_save, 102, 36);
     lv_obj_align(sw_save, LV_ALIGN_BOTTOM_LEFT, 12, -12);
+    style_btn_matrix(sw_save);
     lv_obj_add_event_cb(sw_save, btn_save_swipe_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *sw_save_lbl = lv_label_create(sw_save);
     lv_label_set_text(sw_save_lbl, "Guardar");
@@ -433,6 +469,7 @@ void ui_clock_create(void)
     lv_obj_t *sw_close = lv_button_create(s_swipe_wifi);
     lv_obj_set_size(sw_close, 102, 36);
     lv_obj_align(sw_close, LV_ALIGN_BOTTOM_RIGHT, -12, -12);
+    style_btn_matrix(sw_close);
     lv_obj_add_event_cb(sw_close, btn_close_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *sw_close_lbl = lv_label_create(sw_close);
     lv_label_set_text(sw_close_lbl, "Cerrar");
