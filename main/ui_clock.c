@@ -33,16 +33,10 @@ static uint8_t s_active_tile = 0;
 static uint8_t s_last_rot_quadrant = 0;
 static uint8_t s_rot_candidate = 0;
 static uint8_t s_rot_stable_count = 0;
+static bool s_swipe_handled = false;
 
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
-
-static int16_t clamp16(int32_t v, int16_t min, int16_t max)
-{
-    if (v < min) return min;
-    if (v > max) return max;
-    return (int16_t)v;
-}
 
 static uint8_t tile_index_from_obj(lv_obj_t *obj)
 {
@@ -60,24 +54,65 @@ static void tile_changed_cb(lv_event_t *e)
     ESP_LOGI(TAG_UI, "Pantalla activa=%d (touch swipe)", s_active_tile + 1);
 }
 
+
+static void go_to_tile(uint8_t next, const char *reason)
+{
+    if (next > 4) next = 4;
+    if (next == s_active_tile) return;
+    lv_tileview_set_tile_by_index(s_tileview, next, 0, LV_ANIM_ON);
+    ESP_LOGI(TAG_UI, "Pantalla activa=%d (%s)", next + 1, reason);
+}
+
+static void tile_press_cb(lv_event_t *e)
+{
+    (void)e;
+    s_swipe_handled = false;
+}
+
+static void tile_pressing_cb(lv_event_t *e)
+{
+    (void)e;
+    if (s_swipe_handled) return;
+
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev) return;
+
+    lv_point_t vect = {0};
+    lv_indev_get_vect(indev, &vect);
+
+    int16_t ax = vect.x >= 0 ? vect.x : -vect.x;
+    int16_t ay = vect.y >= 0 ? vect.y : -vect.y;
+
+    if (ax < 12 || ax < (ay + 4)) {
+        return;
+    }
+
+    if (vect.x < 0 && s_active_tile < 4) {
+        go_to_tile((uint8_t)(s_active_tile + 1), "swipe corto");
+        s_swipe_handled = true;
+    } else if (vect.x > 0 && s_active_tile > 0) {
+        go_to_tile((uint8_t)(s_active_tile - 1), "swipe corto");
+        s_swipe_handled = true;
+    }
+}
+
+static void tile_release_cb(lv_event_t *e)
+{
+    (void)e;
+    s_swipe_handled = false;
+}
 static void tile_gesture_cb(lv_event_t *e)
 {
+    (void)e;
     lv_indev_t *indev = lv_indev_active();
     if (!indev) return;
 
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
-    uint8_t next = s_active_tile;
-
     if (dir == LV_DIR_LEFT && s_active_tile < 4) {
-        next = s_active_tile + 1;
+        go_to_tile((uint8_t)(s_active_tile + 1), "gesture");
     } else if (dir == LV_DIR_RIGHT && s_active_tile > 0) {
-        next = s_active_tile - 1;
-    } else {
-        return;
+        go_to_tile((uint8_t)(s_active_tile - 1), "gesture");
     }
-
-    lv_tileview_set_tile_by_index(s_tileview, next, 0, LV_ANIM_ON);
-    ESP_LOGI(TAG_UI, "Swipe gesture dir=%d -> pantalla=%d", (int)dir, next + 1);
 }
 
 static uint8_t accel_to_quadrant(int16_t ax, int16_t ay, bool valid)
@@ -155,15 +190,8 @@ static void clock_timer_cb(lv_timer_t *t)
     lv_obj_set_style_text_color(s_time_lbl, lv_color_make(20, green, 25), 0);
     lv_obj_set_style_text_color(s_brand_lbl, lv_color_make(20, (uint8_t)(green - 40), 20), 0);
 
-    if (s_accel_valid) {
-        int16_t xoff = clamp16((int32_t)s_ax / 450, -26, 26);
-        int16_t yoff = clamp16((int32_t)(-s_ay) / 450, -32, 32);
-        lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, xoff, yoff + 6);
-        lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, xoff / 2, 18);
-    } else {
-        lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
-        lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
-    }
+    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
+    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
 
     update_clock_rotation_from_accel();
 }
@@ -204,6 +232,9 @@ void ui_clock_create(void)
     lv_obj_set_style_border_width(s_tileview, 0, 0);
     lv_obj_add_event_cb(s_tileview, tile_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s_tileview, tile_gesture_cb, LV_EVENT_GESTURE, NULL);
+    lv_obj_add_event_cb(s_tileview, tile_press_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(s_tileview, tile_pressing_cb, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(s_tileview, tile_release_cb, LV_EVENT_RELEASED, NULL);
 
     for (uint8_t i = 0; i < 5; i++) {
         s_tiles[i] = lv_tileview_add_tile(s_tileview, i, 0, LV_DIR_HOR);
