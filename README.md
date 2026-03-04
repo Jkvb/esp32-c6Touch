@@ -634,3 +634,10 @@ Además, el reloj ahora cambia color dinámicamente para confirmar que el pipeli
 - `wichIA` se muestra en una etiqueta separada y **más pequeña**.
 - El acelerómetro desplaza sutilmente la hora y ajusta el brillo verde del fondo.
 - Maqueta de navegación por acelerómetro: inclinando fuerte izquierda/derecha cambia entre pantallas y muestra `UI #1/#2/#3`.
+
+
+### UI simplificada (5 pantallas touch)
+
+- Se eliminó el menú WiFi complejo en pantalla (drawer/teclado) para priorizar estabilidad táctil.
+- Ahora hay 5 pantallas navegables por swipe horizontal.
+- La pantalla 1 muestra reloj adaptado a 170x320, y las pantallas 2-5 son de maqueta.
