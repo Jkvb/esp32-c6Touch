@@ -21,6 +21,36 @@ static const char *TAG = "ACCEL";
 static uint8_t s_addr = 0;
 static bool s_ready = false;
 
+static esp_err_t i2c_ping(uint8_t addr)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_stop(cmd);
+    esp_err_t err = i2c_master_cmd_begin(I2C_PORT_NUM, cmd, pdMS_TO_TICKS(40));
+    i2c_cmd_link_delete(cmd);
+    return err;
+}
+
+static void i2c_scan_log(void)
+{
+    char found[192] = {0};
+    size_t used = 0;
+    int count = 0;
+    for (uint8_t addr = 1; addr < 0x7F; addr++) {
+        if (i2c_ping(addr) == ESP_OK) {
+            int n = snprintf(found + used, sizeof(found) - used, "0x%02X ", addr);
+            if (n > 0 && (size_t)n < (sizeof(found) - used)) used += (size_t)n;
+            count++;
+        }
+    }
+    if (count > 0) {
+        ESP_LOGI(TAG, "I2C scan SDA=%d SCL=%d -> %d dev(s): %s", I2C_SDA_GPIO, I2C_SCL_GPIO, count, found);
+    } else {
+        ESP_LOGW(TAG, "I2C scan SDA=%d SCL=%d -> sin dispositivos", I2C_SDA_GPIO, I2C_SCL_GPIO);
+    }
+}
+
 static esp_err_t accel_write_reg(uint8_t reg, uint8_t value)
 {
     uint8_t data[2] = {reg, value};
@@ -52,6 +82,8 @@ esp_err_t accel_qmi8658_init(void)
         return err;
     }
 
+    i2c_scan_log();
+
     uint8_t who = 0;
     const uint8_t addrs[] = {QMI8658_ADDR1, QMI8658_ADDR2};
     for (size_t i = 0; i < (sizeof(addrs) / sizeof(addrs[0])); i++) {
@@ -64,6 +96,9 @@ esp_err_t accel_qmi8658_init(void)
     }
 
     if (!s_ready) {
+        if (i2c_ping(0x15) == ESP_OK) {
+            ESP_LOGW(TAG, "Detectado touch (0x15) en bus I2C, pero QMI8658 no responde.");
+        }
         ESP_LOGW(TAG, "No se detecto QMI8658 en I2C (SDA=%d, SCL=%d)", I2C_SDA_GPIO, I2C_SCL_GPIO);
         return ESP_ERR_NOT_FOUND;
     }

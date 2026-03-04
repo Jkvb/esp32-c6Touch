@@ -9,6 +9,7 @@
 #include "esp_lcd_panel_ops.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
+#include "driver/i2c.h"
 
 static const char *TAG = "DISP";
 
@@ -44,7 +45,125 @@ static const char *TAG = "DISP";
 #define LCD_MIRROR_Y      0
 #define LCD_SWAP_XY       0
 
+#define TOUCH_I2C_PORT      I2C_NUM_0
+#define TOUCH_I2C_SDA       20
+#define TOUCH_I2C_SCL       21
+#define TOUCH_I2C_FREQ_HZ   400000
+#define TOUCH_CST816_ADDR   0x15
+
+static bool s_touch_pressed = false;
+static uint16_t s_touch_x = 0;
+static uint16_t s_touch_y = 0;
+static bool s_touch_ready = false;
+static uint32_t s_touch_reads = 0;
+
 static esp_timer_handle_t s_lv_tick_timer;
+
+static esp_err_t touch_i2c_ping(uint8_t addr)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (addr << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_stop(cmd);
+    esp_err_t err = i2c_master_cmd_begin(TOUCH_I2C_PORT, cmd, pdMS_TO_TICKS(30));
+    i2c_cmd_link_delete(cmd);
+    return err;
+}
+
+static esp_err_t touch_cst816_init(void)
+{
+    i2c_config_t cfg = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = TOUCH_I2C_SDA,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_io_num = TOUCH_I2C_SCL,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = TOUCH_I2C_FREQ_HZ,
+        .clk_flags = 0,
+    };
+
+    esp_err_t err = i2c_param_config(TOUCH_I2C_PORT, &cfg);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Touch: i2c_param_config fallo: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = i2c_driver_install(TOUCH_I2C_PORT, cfg.mode, 0, 0, 0);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "Touch: i2c_driver_install fallo: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = touch_i2c_ping(TOUCH_CST816_ADDR);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Touch CST816 no detectado en 0x%02X (SDA=%d,SCL=%d): %s",
+                 TOUCH_CST816_ADDR, TOUCH_I2C_SDA, TOUCH_I2C_SCL, esp_err_to_name(err));
+        return err;
+    }
+
+    s_touch_ready = true;
+    ESP_LOGI(TAG, "Touch CST816 detectado en 0x%02X (SDA=%d,SCL=%d)",
+             TOUCH_CST816_ADDR, TOUCH_I2C_SDA, TOUCH_I2C_SCL);
+    return ESP_OK;
+}
+
+static bool touch_cst816_read_point(uint16_t *x, uint16_t *y, bool *pressed)
+{
+    uint8_t reg = 0x02;
+    uint8_t data[6] = {0};
+    esp_err_t err = i2c_master_write_read_device(TOUCH_I2C_PORT,
+                                                  TOUCH_CST816_ADDR,
+                                                  &reg,
+                                                  1,
+                                                  data,
+                                                  sizeof(data),
+                                                  pdMS_TO_TICKS(20));
+    if (err != ESP_OK) {
+        return false;
+    }
+
+    uint8_t points = data[1] & 0x0F;
+    if (points == 0) {
+        *pressed = false;
+        return true;
+    }
+
+    uint16_t tx = (uint16_t)(((data[2] & 0x0F) << 8) | data[3]);
+    uint16_t ty = (uint16_t)(((data[4] & 0x0F) << 8) | data[5]);
+
+    if (tx >= LCD_H_RES) tx = LCD_H_RES - 1;
+    if (ty >= LCD_V_RES) ty = LCD_V_RES - 1;
+
+    *x = tx;
+    *y = ty;
+    *pressed = true;
+    return true;
+}
+
+static void lvgl_touch_read_cb(lv_indev_t * indev, lv_indev_data_t * data)
+{
+    (void)indev;
+
+    if (s_touch_ready) {
+        bool pressed = false;
+        uint16_t x = s_touch_x;
+        uint16_t y = s_touch_y;
+        if (touch_cst816_read_point(&x, &y, &pressed)) {
+            s_touch_pressed = pressed;
+            s_touch_x = x;
+            s_touch_y = y;
+            s_touch_reads++;
+
+            if ((s_touch_reads % 50U) == 1U && pressed) {
+                ESP_LOGI(TAG, "Touch activo x=%u y=%u", (unsigned)x, (unsigned)y);
+            }
+        }
+    }
+
+    data->point.x = s_touch_x;
+    data->point.y = s_touch_y;
+    data->state = s_touch_pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
 
 /* DMA done -> LVGL flush ready */
 static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
@@ -169,6 +288,16 @@ lv_display_t* display_st7789_lvgl_init(void)
     }
 
     lv_display_set_buffers(disp, buf, NULL, buf_sz, LV_DISPLAY_RENDER_MODE_PARTIAL);
+
+    /* 5.1) Touch -> LVGL input */
+    if (touch_cst816_init() == ESP_OK) {
+        lv_indev_t *indev = lv_indev_create();
+        lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_read_cb(indev, lvgl_touch_read_cb);
+        ESP_LOGI(TAG, "Touch LVGL input registrado");
+    } else {
+        ESP_LOGW(TAG, "Touch no inicializado; UI seguirá solo por gestos simulados/botones");
+    }
 
     /* 6) Hook DMA-done callback -> flush_ready */
     esp_lcd_panel_io_callbacks_t cbs = {
