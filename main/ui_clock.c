@@ -104,13 +104,19 @@ static void clock_timer_cb(lv_timer_t *t)
     }
     lv_label_set_text(s_lbl, buf);
 
+    uint8_t sec = (uint8_t)ti.tm_sec;
+    uint8_t r = (uint8_t)(120 + (sec * 7) % 120);
+    uint8_t g = (uint8_t)(120 + (sec * 5) % 120);
+    uint8_t b = (uint8_t)(120 + (sec * 3) % 120);
+    lv_obj_set_style_text_color(s_lbl, lv_color_make(r, g, b), 0);
+
     if (s_accel_valid) {
         int16_t xoff = clamp16((int32_t)s_ax / 500, -50, 50);
         int16_t yoff = clamp16((int32_t)(-s_ay) / 500, -70, 70);
         lv_obj_align(s_lbl, LV_ALIGN_CENTER, xoff, yoff);
 
-        uint8_t blue = (uint8_t)clamp16(80 + (s_ax > 0 ? s_ax : -s_ax) / 100, 40, 200);
-        lv_obj_set_style_bg_color(lv_screen_active(), lv_color_make(0, 40, blue), 0);
+        uint8_t blue = (uint8_t)clamp16(80 + (s_ax > 0 ? s_ax : -s_ax) / 100, 40, 220);
+        lv_obj_set_style_bg_color(lv_screen_active(), lv_color_make(20, 40, blue), 0);
     }
 }
 

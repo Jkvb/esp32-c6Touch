@@ -606,3 +606,9 @@ En ambas puedes:
 - seleccionar una red de la lista (dropdown),
 - escribir/ajustar password con teclado virtual,
 - tocar **Guardar** para conectar.
+
+
+### Color magenta en pantalla (fix aplicado)
+
+Si el blanco se ve magenta en ST7789, se ajustó el orden de color del panel a **BGR** en el driver.
+Además, el reloj ahora cambia color dinámicamente para confirmar que el pipeline de color está bien.

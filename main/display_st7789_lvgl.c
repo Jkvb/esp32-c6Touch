@@ -117,10 +117,11 @@ lv_display_t* display_st7789_lvgl_init(void)
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_HOST, &io_config, &io_handle));
 
     /* 3) Panel ST7789 */
+    /* Orden BGR corrige tinte magenta en varios ST7789/Waveshare. */
     esp_lcd_panel_handle_t panel_handle = NULL;
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = PIN_NUM_LCD_RST,
-        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
+        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
         .bits_per_pixel = 16,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle));
