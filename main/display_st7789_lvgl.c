@@ -47,8 +47,8 @@ static const char *TAG = "DISP";
 #define LCD_SWAP_XY       0
 
 #define TOUCH_I2C_PORT      I2C_NUM_0
-#define TOUCH_I2C_SDA_DEFAULT 20
-#define TOUCH_I2C_SCL_DEFAULT 21
+#define TOUCH_I2C_SDA_DEFAULT 18
+#define TOUCH_I2C_SCL_DEFAULT 8
 #define TOUCH_I2C_FREQ_HZ   400000
 #define TOUCH_CST816_ADDR   0x15
 
@@ -64,14 +64,6 @@ static int s_touch_i2c_sda = TOUCH_I2C_SDA_DEFAULT;
 static int s_touch_i2c_scl = TOUCH_I2C_SCL_DEFAULT;
 static bool s_touch_i2c_installed = false;
 
-static const int s_touch_i2c_candidates[][2] = {
-    {20, 21},
-    {8, 9},
-    {18, 19},
-    {19, 20},
-    {6, 7},
-    {1, 2},
-};
 
 static esp_err_t touch_i2c_ping(uint8_t addr);
 
@@ -155,42 +147,27 @@ static esp_err_t touch_cst816_init(void)
     int accel_scl = TOUCH_I2C_SCL_DEFAULT;
     accel_qmi8658_get_i2c_pins(&accel_sda, &accel_scl);
 
+    ESP_LOGI(TAG, "Touch init en bus compartido SDA=%d SCL=%d", accel_sda, accel_scl);
+
+    if (touch_i2c_reconfigure(accel_sda, accel_scl) != ESP_OK) {
+        return ESP_FAIL;
+    }
+
+    touch_i2c_scan_log();
+
     const uint8_t addrs[] = {0x15, 0x14, 0x38, 0x5D};
-
     bool found = false;
-    for (size_t i = 0; i < (sizeof(s_touch_i2c_candidates) / sizeof(s_touch_i2c_candidates[0])); i++) {
-        int sda = s_touch_i2c_candidates[i][0];
-        int scl = s_touch_i2c_candidates[i][1];
-
-        if (i == 0) {
-            sda = accel_sda;
-            scl = accel_scl;
-        }
-
-        if (touch_i2c_reconfigure(sda, scl) != ESP_OK) {
-            continue;
-        }
-
-        ESP_LOGI(TAG, "Touch init probando I2C SDA=%d SCL=%d", sda, scl);
-        touch_i2c_scan_log();
-
-        for (size_t j = 0; j < sizeof(addrs); j++) {
-            if (touch_i2c_ping(addrs[j]) == ESP_OK) {
-                s_touch_addr = addrs[j];
-                found = true;
-                break;
-            }
-        }
-
-        if (found) {
+    for (size_t j = 0; j < sizeof(addrs); j++) {
+        if (touch_i2c_ping(addrs[j]) == ESP_OK) {
+            s_touch_addr = addrs[j];
+            found = true;
             break;
         }
-
-        ESP_LOGW(TAG, "Touch no detectado en SDA=%d SCL=%d", sda, scl);
     }
 
     if (!found) {
-        ESP_LOGW(TAG, "Touch no detectado en addrs 0x15/0x14/0x38/0x5D tras probar pines alternos");
+        ESP_LOGW(TAG, "Touch no detectado en addrs 0x15/0x14/0x38/0x5D sobre SDA=%d SCL=%d",
+                 s_touch_i2c_sda, s_touch_i2c_scl);
         return ESP_ERR_NOT_FOUND;
     }
 

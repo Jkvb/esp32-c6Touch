@@ -326,7 +326,7 @@ static void ui_wifi_save_handler(const char *ssid, const char *pass)
 void app_main(void)
 {
     ESP_LOGI(TAG, "Boot. DISPLAY + reloj + acelerómetro + WiFi SNTP.");
-    ESP_LOGI(TAG, "Puertos QMI8658 por defecto: I2C0 SDA=GPIO20 SCL=GPIO21, addr=0x6A/0x6B");
+    ESP_LOGI(TAG, "Puertos QMI8658 por defecto: I2C0 SDA=GPIO18 SCL=GPIO8, addr=0x6A/0x6B");
 
     /* Inicializar accel primero para validar que el bus I2C base funciona
        antes de inicializar touch/LVGL sobre el mismo puerto I2C0. */

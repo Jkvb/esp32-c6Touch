@@ -4,8 +4,8 @@
 #include "esp_log.h"
 
 #define I2C_PORT_NUM            I2C_NUM_0
-#define I2C_DEFAULT_SDA_GPIO    20
-#define I2C_DEFAULT_SCL_GPIO    21
+#define I2C_DEFAULT_SDA_GPIO    18
+#define I2C_DEFAULT_SCL_GPIO    8
 #define I2C_FREQ_HZ             400000
 
 #define QMI8658_ADDR1           0x6A
@@ -25,11 +25,9 @@ static int s_i2c_scl = I2C_DEFAULT_SCL_GPIO;
 static bool s_i2c_installed = false;
 
 static const int s_i2c_candidates[][2] = {
+    {18, 8},
     {20, 21},
-    {8, 9},
-    {18, 19},
-    {19, 20},
-    {6, 7},
+    {21, 22},
 };
 
 static esp_err_t i2c_ping(uint8_t addr)
@@ -186,7 +184,7 @@ esp_err_t accel_qmi8658_init(void)
         if (i2c_ping(0x15) == ESP_OK) {
             ESP_LOGW(TAG, "Detectado touch (0x15) en bus I2C, pero QMI8658 no responde.");
         }
-        ESP_LOGW(TAG, "No se detecto QMI8658 en I2C (SDA=%d, SCL=%d)", s_i2c_sda, s_i2c_scl);
+        ESP_LOGW(TAG, "No se detecto QMI8658 en I2C activo (SDA=%d, SCL=%d)", s_i2c_sda, s_i2c_scl);
         return ESP_ERR_NOT_FOUND;
     }
 

@@ -89,7 +89,7 @@ mode
 ### 3) Pines usados en esta implementación
 
 - Display SPI (Waveshare): MOSI=GPIO4, SCK=GPIO5, DC=GPIO6, CS=GPIO7, RST=GPIO14, BL=GPIO15.
-- Acelerómetro QMI8658 por I2C: SDA=GPIO20, SCL=GPIO21, direcciones probadas: `0x6A` y `0x6B`.
+- Acelerómetro QMI8658 por I2C: SDA=GPIO18, SCL=GPIO8, direcciones probadas: `0x6A` y `0x6B`.
 
 ## Hora automática por WiFi (SNTP)
 
@@ -515,22 +515,22 @@ Si el touch no responde, en monitor debes ver trazas como:
 - `UI_CLOCK: Tap app WiFi`
 - `UI_CLOCK: Focus en input WiFi`
 - `UI_CLOCK: Guardar WiFi desde UI (ssid_len=... pass_len=...)`
-- `DISP: Touch detectado en 0x.. (SDA=20,SCL=21)`
+- `DISP: Touch detectado en 0x.. (SDA=18,SCL=8)`
 - `DISP: Touch LVGL input registrado`
 - `DISP: Touch DOWN x=... y=...`
 - `DISP: Touch MOVE x=... y=...`
 - `DISP: Touch UP x=... y=...`
 - `DISP: Touch read fallo (addr=0x..), err_count=...`
-- `DISP: Touch I2C scan SDA=20 SCL=21 -> ...`
+- `DISP: Touch I2C scan SDA=18 SCL=8 -> ...`
 - `ACCEL: Sin respuesta I2C en SDA=.. SCL=..; iniciando auto-detección de pines`
 - `ACCEL: Auto-detección I2C exitosa en SDA=.. SCL=..`
-- `DISP: Touch init probando I2C SDA=.. SCL=..`
+- `DISP: Touch init en bus compartido SDA=.. SCL=..`
 - `DISP: Touch raw p=.. bytes=.. .. .. .. .. .. ..`
 - `DISP: Touch activo x=... y=...`
 
 Si no aparece ninguna, revisa cableado/driver touch, dirección I2C del panel y que no haya conflicto en I2C.
 
-Si el log muestra `sin dispositivos` en **todos** los pines probados, el touch no está expuesto en I2C en esa variante de hardware (o está desenergizado).
+Si el log sigue en `sin dispositivos` sobre GPIO18/GPIO8, revisa alimentación del touch o pull-ups físicos del bus I2C.
 
 Para acelerómetro, ahora también verás:
 - `IAWICHU: Acelerómetro activo en I2C ... (init temprano).`
