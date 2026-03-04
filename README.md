@@ -524,11 +524,13 @@ Si el touch no responde, en monitor debes ver trazas como:
 - `DISP: Touch I2C scan SDA=20 SCL=21 -> ...`
 - `ACCEL: Sin respuesta I2C en SDA=.. SCL=..; iniciando auto-detección de pines`
 - `ACCEL: Auto-detección I2C exitosa en SDA=.. SCL=..`
-- `DISP: Touch init usando I2C SDA=.. SCL=..`
+- `DISP: Touch init probando I2C SDA=.. SCL=..`
 - `DISP: Touch raw p=.. bytes=.. .. .. .. .. .. ..`
 - `DISP: Touch activo x=... y=...`
 
 Si no aparece ninguna, revisa cableado/driver touch, dirección I2C del panel y que no haya conflicto en I2C.
+
+Si el log muestra `sin dispositivos` en **todos** los pines probados, el touch no está expuesto en I2C en esa variante de hardware (o está desenergizado).
 
 Para acelerómetro, ahora también verás:
 - `IAWICHU: Acelerómetro activo en I2C ... (init temprano).`

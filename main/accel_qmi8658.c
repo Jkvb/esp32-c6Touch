@@ -22,6 +22,7 @@ static uint8_t s_addr = 0;
 static bool s_ready = false;
 static int s_i2c_sda = I2C_DEFAULT_SDA_GPIO;
 static int s_i2c_scl = I2C_DEFAULT_SCL_GPIO;
+static bool s_i2c_installed = false;
 
 static const int s_i2c_candidates[][2] = {
     {20, 21},
@@ -74,7 +75,10 @@ static void i2c_scan_log(void)
 
 static esp_err_t i2c_reconfigure_bus(int sda_gpio, int scl_gpio)
 {
-    (void)i2c_driver_delete(I2C_PORT_NUM);
+    if (s_i2c_installed) {
+        (void)i2c_driver_delete(I2C_PORT_NUM);
+        s_i2c_installed = false;
+    }
 
     i2c_config_t cfg = {
         .mode = I2C_MODE_MASTER,
@@ -98,6 +102,7 @@ static esp_err_t i2c_reconfigure_bus(int sda_gpio, int scl_gpio)
         ESP_LOGI(TAG, "I2C accel instalado en puerto %d (SDA=%d SCL=%d)", (int)I2C_PORT_NUM, sda_gpio, scl_gpio);
         s_i2c_sda = sda_gpio;
         s_i2c_scl = scl_gpio;
+        s_i2c_installed = true;
         return ESP_OK;
     }
 

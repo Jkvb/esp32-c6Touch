@@ -62,6 +62,16 @@ static uint32_t s_touch_read_errors = 0;
 static uint32_t s_touch_raw_logs = 0;
 static int s_touch_i2c_sda = TOUCH_I2C_SDA_DEFAULT;
 static int s_touch_i2c_scl = TOUCH_I2C_SCL_DEFAULT;
+static bool s_touch_i2c_installed = false;
+
+static const int s_touch_i2c_candidates[][2] = {
+    {20, 21},
+    {8, 9},
+    {18, 19},
+    {19, 20},
+    {6, 7},
+    {1, 2},
+};
 
 static esp_err_t touch_i2c_ping(uint8_t addr);
 
@@ -99,58 +109,89 @@ static esp_err_t touch_i2c_ping(uint8_t addr)
     return err;
 }
 
-static esp_err_t touch_cst816_init(void)
+static esp_err_t touch_i2c_reconfigure(int sda, int scl)
 {
-    int accel_sda = TOUCH_I2C_SDA_DEFAULT;
-    int accel_scl = TOUCH_I2C_SCL_DEFAULT;
-    accel_qmi8658_get_i2c_pins(&accel_sda, &accel_scl);
-    s_touch_i2c_sda = accel_sda;
-    s_touch_i2c_scl = accel_scl;
-
-    ESP_LOGI(TAG, "Touch init usando I2C SDA=%d SCL=%d", s_touch_i2c_sda, s_touch_i2c_scl);
+    if (s_touch_i2c_installed) {
+        (void)i2c_driver_delete(TOUCH_I2C_PORT);
+        s_touch_i2c_installed = false;
+    }
 
     i2c_config_t cfg = {
         .mode = I2C_MODE_MASTER,
-        .sda_io_num = s_touch_i2c_sda,
+        .sda_io_num = sda,
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_io_num = s_touch_i2c_scl,
+        .scl_io_num = scl,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = TOUCH_I2C_FREQ_HZ,
+        .master.clk_speed = 100000,
         .clk_flags = 0,
     };
 
     esp_err_t cfg_err = i2c_param_config(TOUCH_I2C_PORT, &cfg);
     if (cfg_err != ESP_OK) {
-        ESP_LOGW(TAG, "Touch: i2c_param_config retorno %s", esp_err_to_name(cfg_err));
+        ESP_LOGW(TAG, "Touch: i2c_param_config fallo en SDA=%d SCL=%d: %s", sda, scl, esp_err_to_name(cfg_err));
+        return cfg_err;
     }
 
     esp_err_t install_err = i2c_driver_install(TOUCH_I2C_PORT, cfg.mode, 0, 0, 0);
-    if (install_err == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "Touch: I2C ya inicializado en puerto %d, se conserva config actual", (int)TOUCH_I2C_PORT);
-    } else if (install_err == ESP_FAIL) {
-        ESP_LOGW(TAG, "Touch: i2c_driver_install retorno ESP_FAIL; se intentará usar el bus existente");
-    } else if (install_err == ESP_OK) {
-        ESP_LOGI(TAG, "Touch: I2C instalado en puerto %d", (int)TOUCH_I2C_PORT);
+    if (install_err == ESP_OK) {
+        s_touch_i2c_installed = true;
+    } else if (install_err == ESP_ERR_INVALID_STATE || install_err == ESP_FAIL) {
+        ESP_LOGW(TAG, "Touch: i2c_driver_install retorno %s en SDA=%d SCL=%d; se intentará usar bus existente",
+                 esp_err_to_name(install_err), sda, scl);
     } else {
-        ESP_LOGW(TAG, "Touch: i2c_driver_install fallo: %s", esp_err_to_name(install_err));
+        ESP_LOGW(TAG, "Touch: i2c_driver_install fallo en SDA=%d SCL=%d: %s",
+                 sda, scl, esp_err_to_name(install_err));
         return install_err;
     }
 
-    touch_i2c_scan_log();
+    s_touch_i2c_sda = sda;
+    s_touch_i2c_scl = scl;
+    return ESP_OK;
+}
+
+static esp_err_t touch_cst816_init(void)
+{
+    int accel_sda = TOUCH_I2C_SDA_DEFAULT;
+    int accel_scl = TOUCH_I2C_SCL_DEFAULT;
+    accel_qmi8658_get_i2c_pins(&accel_sda, &accel_scl);
 
     const uint8_t addrs[] = {0x15, 0x14, 0x38, 0x5D};
-    esp_err_t err = ESP_FAIL;
-    for (size_t i = 0; i < sizeof(addrs); i++) {
-        if (touch_i2c_ping(addrs[i]) == ESP_OK) {
-            s_touch_addr = addrs[i];
-            err = ESP_OK;
+
+    bool found = false;
+    for (size_t i = 0; i < (sizeof(s_touch_i2c_candidates) / sizeof(s_touch_i2c_candidates[0])); i++) {
+        int sda = s_touch_i2c_candidates[i][0];
+        int scl = s_touch_i2c_candidates[i][1];
+
+        if (i == 0) {
+            sda = accel_sda;
+            scl = accel_scl;
+        }
+
+        if (touch_i2c_reconfigure(sda, scl) != ESP_OK) {
+            continue;
+        }
+
+        ESP_LOGI(TAG, "Touch init probando I2C SDA=%d SCL=%d", sda, scl);
+        touch_i2c_scan_log();
+
+        for (size_t j = 0; j < sizeof(addrs); j++) {
+            if (touch_i2c_ping(addrs[j]) == ESP_OK) {
+                s_touch_addr = addrs[j];
+                found = true;
+                break;
+            }
+        }
+
+        if (found) {
             break;
         }
+
+        ESP_LOGW(TAG, "Touch no detectado en SDA=%d SCL=%d", sda, scl);
     }
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Touch no detectado en addrs 0x15/0x14/0x38/0x5D (SDA=%d,SCL=%d)",
-                 s_touch_i2c_sda, s_touch_i2c_scl);
-        return err;
+
+    if (!found) {
+        ESP_LOGW(TAG, "Touch no detectado en addrs 0x15/0x14/0x38/0x5D tras probar pines alternos");
+        return ESP_ERR_NOT_FOUND;
     }
 
     s_touch_ready = true;
