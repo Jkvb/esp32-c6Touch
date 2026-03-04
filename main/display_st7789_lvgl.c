@@ -57,6 +57,7 @@ static uint16_t s_touch_y = 0;
 static bool s_touch_ready = false;
 static uint32_t s_touch_reads = 0;
 static uint8_t s_touch_addr = TOUCH_CST816_ADDR;
+static uint32_t s_touch_read_errors = 0;
 
 static esp_timer_handle_t s_lv_tick_timer;
 
@@ -160,13 +161,31 @@ static void lvgl_touch_read_cb(lv_indev_t * indev, lv_indev_data_t * data)
         uint16_t x = s_touch_x;
         uint16_t y = s_touch_y;
         if (touch_cst816_read_point(&x, &y, &pressed)) {
+            s_touch_read_errors = 0;
+            bool was_pressed = s_touch_pressed;
+            uint16_t old_x = s_touch_x;
+            uint16_t old_y = s_touch_y;
+
             s_touch_pressed = pressed;
             s_touch_x = x;
             s_touch_y = y;
             s_touch_reads++;
 
-            if ((s_touch_reads % 50U) == 1U && pressed) {
+            if (pressed && !was_pressed) {
+                ESP_LOGI(TAG, "Touch DOWN x=%u y=%u", (unsigned)x, (unsigned)y);
+            } else if (!pressed && was_pressed) {
+                ESP_LOGI(TAG, "Touch UP x=%u y=%u", (unsigned)old_x, (unsigned)old_y);
+            } else if (pressed && (old_x != x || old_y != y) && ((s_touch_reads % 10U) == 0U)) {
+                ESP_LOGI(TAG, "Touch MOVE x=%u y=%u", (unsigned)x, (unsigned)y);
+            } else if ((s_touch_reads % 50U) == 1U && pressed) {
                 ESP_LOGI(TAG, "Touch activo x=%u y=%u", (unsigned)x, (unsigned)y);
+            }
+        } else {
+            s_touch_read_errors++;
+            if (s_touch_read_errors == 1 || (s_touch_read_errors % 25U) == 0U) {
+                ESP_LOGW(TAG, "Touch read fallo (addr=0x%02X), err_count=%lu",
+                         (unsigned)s_touch_addr,
+                         (unsigned long)s_touch_read_errors);
             }
         }
     }

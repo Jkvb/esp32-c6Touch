@@ -517,6 +517,10 @@ Si el touch no responde, en monitor debes ver trazas como:
 - `UI_CLOCK: Guardar WiFi desde UI (ssid_len=... pass_len=...)`
 - `DISP: Touch detectado en 0x.. (SDA=20,SCL=21)`
 - `DISP: Touch LVGL input registrado`
+- `DISP: Touch DOWN x=... y=...`
+- `DISP: Touch MOVE x=... y=...`
+- `DISP: Touch UP x=... y=...`
+- `DISP: Touch read fallo (addr=0x..), err_count=...`
 - `DISP: Touch activo x=... y=...`
 
 Si no aparece ninguna, revisa cableado/driver touch, dirección I2C del panel y que no haya conflicto en I2C.
