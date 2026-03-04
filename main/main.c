@@ -379,12 +379,7 @@ void app_main(void)
     }
 
     if (!accel_ok) {
-        /* Reintento por si touch/LCD ya dejó el bus estable o cambió timing. */
-        acc_ret = accel_qmi8658_init();
-        if (acc_ret == ESP_OK) {
-            accel_ok = true;
-            ESP_LOGI(TAG, "Acelerómetro activo tras reintento post-display.");
-        }
+        ESP_LOGW(TAG, "Se omite reintento accel post-display para evitar choque de init I2C; revisar logs ACCEL/DISP scan.");
     }
 
     if (accel_ok) {

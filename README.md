@@ -521,6 +521,7 @@ Si el touch no responde, en monitor debes ver trazas como:
 - `DISP: Touch MOVE x=... y=...`
 - `DISP: Touch UP x=... y=...`
 - `DISP: Touch read fallo (addr=0x..), err_count=...`
+- `DISP: Touch I2C scan SDA=20 SCL=21 -> ...`
 - `DISP: Touch raw p=.. bytes=.. .. .. .. .. .. ..`
 - `DISP: Touch activo x=... y=...`
 
@@ -531,6 +532,7 @@ Para acelerómetro, ahora también verás:
 - `IAWICHU: Accel init temprano fallo: ...`
 - `IAWICHU: Lectura accel fallo (...), count=...`
 - `IAWICHU: Probe accel post-display OK x=... y=... z=...`
+- `IAWICHU: Se omite reintento accel post-display ...`
 
 
 ## Fix rápido: `idf.py` no reconocido en PowerShell

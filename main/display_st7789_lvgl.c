@@ -60,6 +60,29 @@ static uint8_t s_touch_addr = TOUCH_CST816_ADDR;
 static uint32_t s_touch_read_errors = 0;
 static uint32_t s_touch_raw_logs = 0;
 
+static esp_err_t touch_i2c_ping(uint8_t addr);
+
+static void touch_i2c_scan_log(void)
+{
+    char found[224] = {0};
+    size_t used = 0;
+    int count = 0;
+    for (uint8_t addr = 1; addr < 0x7F; addr++) {
+        if (touch_i2c_ping(addr) == ESP_OK) {
+            int n = snprintf(found + used, sizeof(found) - used, "0x%02X ", addr);
+            if (n > 0 && (size_t)n < (sizeof(found) - used)) used += (size_t)n;
+            count++;
+        }
+    }
+    if (count > 0) {
+        ESP_LOGI(TAG, "Touch I2C scan SDA=%d SCL=%d -> %d dev(s): %s",
+                 TOUCH_I2C_SDA, TOUCH_I2C_SCL, count, found);
+    } else {
+        ESP_LOGW(TAG, "Touch I2C scan SDA=%d SCL=%d -> sin dispositivos",
+                 TOUCH_I2C_SDA, TOUCH_I2C_SCL);
+    }
+}
+
 static esp_timer_handle_t s_lv_tick_timer;
 
 static esp_err_t touch_i2c_ping(uint8_t addr)
@@ -93,12 +116,16 @@ static esp_err_t touch_cst816_init(void)
     esp_err_t install_err = i2c_driver_install(TOUCH_I2C_PORT, cfg.mode, 0, 0, 0);
     if (install_err == ESP_ERR_INVALID_STATE) {
         ESP_LOGI(TAG, "Touch: I2C ya inicializado en puerto %d, se conserva config actual", (int)TOUCH_I2C_PORT);
+    } else if (install_err == ESP_FAIL) {
+        ESP_LOGW(TAG, "Touch: i2c_driver_install retorno ESP_FAIL; se intentará usar el bus existente");
     } else if (install_err == ESP_OK) {
         ESP_LOGI(TAG, "Touch: I2C instalado en puerto %d", (int)TOUCH_I2C_PORT);
     } else {
         ESP_LOGW(TAG, "Touch: i2c_driver_install fallo: %s", esp_err_to_name(install_err));
         return install_err;
     }
+
+    touch_i2c_scan_log();
 
     const uint8_t addrs[] = {0x15, 0x14, 0x38, 0x5D};
     esp_err_t err = ESP_FAIL;

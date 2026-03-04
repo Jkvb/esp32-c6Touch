@@ -82,6 +82,8 @@ esp_err_t accel_qmi8658_init(void)
     esp_err_t install_err = i2c_driver_install(I2C_PORT_NUM, cfg.mode, 0, 0, 0);
     if (install_err == ESP_ERR_INVALID_STATE) {
         ESP_LOGI(TAG, "I2C ya inicializado en puerto %d, reutilizando config actual", (int)I2C_PORT_NUM);
+    } else if (install_err == ESP_FAIL) {
+        ESP_LOGW(TAG, "i2c_driver_install accel retorno ESP_FAIL; intentando operar con bus existente");
     } else if (install_err == ESP_OK) {
         ESP_LOGI(TAG, "I2C accel instalado en puerto %d", (int)I2C_PORT_NUM);
     } else {
