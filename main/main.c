@@ -50,14 +50,20 @@ static void lvgl_task(void *arg)
 static void accel_task(void *arg)
 {
     (void)arg;
+    uint32_t err_count = 0;
 
     while (1) {
         int16_t x = 0, y = 0, z = 0;
         esp_err_t err = accel_qmi8658_read_xyz(&x, &y, &z);
         if (err == ESP_OK) {
+            err_count = 0;
             ui_clock_set_accel(x, y, true);
         } else {
             ui_clock_set_accel(0, 0, false);
+            err_count++;
+            if (err_count == 1 || (err_count % 20U) == 0U) {
+                ESP_LOGW(TAG, "Lectura accel fallo (%s), count=%lu", esp_err_to_name(err), (unsigned long)err_count);
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(80));
     }
@@ -322,6 +328,17 @@ void app_main(void)
     ESP_LOGI(TAG, "Boot. DISPLAY + reloj + acelerómetro + WiFi SNTP.");
     ESP_LOGI(TAG, "Puertos QMI8658: I2C0 SDA=GPIO20 SCL=GPIO21, addr=0x6A/0x6B");
 
+    /* Inicializar accel primero para validar que el bus I2C base funciona
+       antes de inicializar touch/LVGL sobre el mismo puerto I2C0. */
+    bool accel_ok = false;
+    esp_err_t acc_ret = accel_qmi8658_init();
+    if (acc_ret == ESP_OK) {
+        accel_ok = true;
+        ESP_LOGI(TAG, "Acelerómetro activo en I2C SDA=GPIO20 SCL=GPIO21 (init temprano).");
+    } else {
+        ESP_LOGW(TAG, "Accel init temprano fallo: %s", esp_err_to_name(acc_ret));
+    }
+
     wifi_fill_runtime_from_config();
 
     backlight_init();
@@ -351,9 +368,16 @@ void app_main(void)
         ESP_LOGW(TAG, "Sin WiFi: reloj quedará en --:--:-- hasta sincronizar tiempo.");
     }
 
-    esp_err_t acc_ret = accel_qmi8658_init();
-    if (acc_ret == ESP_OK) {
-        ESP_LOGI(TAG, "Acelerómetro activo en I2C SDA=GPIO20 SCL=GPIO21.");
+    if (!accel_ok) {
+        /* Reintento por si touch/LCD ya dejó el bus estable o cambió timing. */
+        acc_ret = accel_qmi8658_init();
+        if (acc_ret == ESP_OK) {
+            accel_ok = true;
+            ESP_LOGI(TAG, "Acelerómetro activo tras reintento post-display.");
+        }
+    }
+
+    if (accel_ok) {
         xTaskCreate(accel_task, "accel_task", 4096, NULL, 4, NULL);
     } else {
         ESP_LOGW(TAG, "Sin acelerómetro por ahora. Revisa puertos I2C: SDA=GPIO20 SCL=GPIO21.");

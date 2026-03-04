@@ -521,6 +521,11 @@ Si el touch no responde, en monitor debes ver trazas como:
 
 Si no aparece ninguna, revisa cableado/driver touch, dirección I2C del panel y que no haya conflicto en I2C.
 
+Para acelerómetro, ahora también verás:
+- `IAWICHU: Acelerómetro activo en I2C ... (init temprano).`
+- `IAWICHU: Accel init temprano fallo: ...`
+- `IAWICHU: Lectura accel fallo (...), count=...`
+
 
 ## Fix rápido: `idf.py` no reconocido en PowerShell
 
