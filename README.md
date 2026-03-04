@@ -504,3 +504,16 @@ La UI ahora incluye un **Smart Menu**:
 - Pantalla de apps con tarjeta **WiFi**.
 - Formulario `SSID`/`Password` con teclado en pantalla.
 - Botón `Guardar` aplica credenciales en runtime (callback de `main.c`).
+
+
+### Logs de touch/menú WiFi para diagnóstico
+
+Si el touch no responde, en monitor debes ver trazas como:
+- `UI_CLOCK: ui_clock_create init`
+- `UI_CLOCK: Gesture detectado dir=...`
+- `UI_CLOCK: Tap en abrir menu (W/handle)`
+- `UI_CLOCK: Tap app WiFi`
+- `UI_CLOCK: Focus en input WiFi`
+- `UI_CLOCK: Guardar WiFi desde UI (ssid_len=... pass_len=...)`
+
+Si no aparece ninguna, revisa driver/calibración touch del display.

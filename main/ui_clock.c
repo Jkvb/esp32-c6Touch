@@ -1,7 +1,9 @@
 #include "ui_clock.h"
 #include "lvgl.h"
+#include "esp_log.h"
 #include <time.h>
 #include <stdio.h>
+#include <string.h>
 
 #if defined(LV_FONT_MONTSERRAT_48) && (LV_FONT_MONTSERRAT_48)
   #define CLOCK_FONT (&lv_font_montserrat_48)
@@ -10,6 +12,8 @@
 #else
   #define CLOCK_FONT (LV_FONT_DEFAULT)
 #endif
+
+static const char *TAG_UI = "UI_CLOCK";
 
 static lv_obj_t *s_lbl = NULL;
 static volatile int16_t s_ax = 0;
@@ -36,6 +40,7 @@ static void hide_drawer(void)
 {
     if (s_drawer) lv_obj_add_flag(s_drawer, LV_OBJ_FLAG_HIDDEN);
     if (s_kb) lv_obj_add_flag(s_kb, LV_OBJ_FLAG_HIDDEN);
+    ESP_LOGI(TAG_UI, "Drawer oculto");
 }
 
 static void show_home_page(void)
@@ -55,6 +60,7 @@ static void show_drawer(void)
 {
     if (!s_drawer) return;
     lv_obj_clear_flag(s_drawer, LV_OBJ_FLAG_HIDDEN);
+    ESP_LOGI(TAG_UI, "Drawer abierto");
     show_home_page();
 }
 
@@ -88,6 +94,7 @@ static void clock_timer_cb(lv_timer_t *t)
 static void btn_close_cb(lv_event_t *e)
 {
     (void)e;
+    ESP_LOGI(TAG_UI, "Tap en cerrar menu");
     hide_drawer();
 }
 
@@ -107,6 +114,7 @@ static void ta_focus_cb(lv_event_t *e)
     lv_obj_t *ta = lv_event_get_target(e);
     lv_keyboard_set_textarea(s_kb, ta);
     lv_obj_clear_flag(s_kb, LV_OBJ_FLAG_HIDDEN);
+    ESP_LOGI(TAG_UI, "Focus en input WiFi");
 }
 
 static void btn_save_cb(lv_event_t *e)
@@ -115,8 +123,11 @@ static void btn_save_cb(lv_event_t *e)
     const char *ssid = lv_textarea_get_text(s_ta_ssid);
     const char *pass = lv_textarea_get_text(s_ta_pass);
 
+    ESP_LOGI(TAG_UI, "Guardar WiFi desde UI (ssid_len=%d pass_len=%d)", (int)strlen(ssid), (int)strlen(pass));
     if (s_wifi_cb) {
         s_wifi_cb(ssid, pass);
+    } else {
+        ESP_LOGW(TAG_UI, "s_wifi_cb es NULL, no se aplican credenciales");
     }
     hide_drawer();
 }
@@ -124,18 +135,21 @@ static void btn_save_cb(lv_event_t *e)
 static void btn_open_cb(lv_event_t *e)
 {
     (void)e;
+    ESP_LOGI(TAG_UI, "Tap en abrir menu (W/handle)");
     show_drawer();
 }
 
 static void btn_wifi_app_cb(lv_event_t *e)
 {
     (void)e;
+    ESP_LOGI(TAG_UI, "Tap app WiFi");
     show_wifi_page();
 }
 
 static void btn_back_home_cb(lv_event_t *e)
 {
     (void)e;
+    ESP_LOGI(TAG_UI, "Back a apps");
     show_home_page();
 }
 
@@ -145,6 +159,7 @@ static void screen_gesture_open_cb(lv_event_t *e)
     if (!indev) return;
 
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+    ESP_LOGI(TAG_UI, "Gesture detectado dir=%d", (int)dir);
     if (dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT || dir == LV_DIR_TOP) {
         show_drawer();
     }
@@ -154,6 +169,7 @@ void ui_clock_create(void)
 {
     lv_obj_t *scr = lv_screen_active();
 
+    ESP_LOGI(TAG_UI, "ui_clock_create init");
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x002060), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_add_event_cb(scr, screen_gesture_open_cb, LV_EVENT_GESTURE, NULL);
