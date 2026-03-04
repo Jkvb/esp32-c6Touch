@@ -593,3 +593,16 @@ Si `idf.py --version` falla, vuelve a ejecutar `C:\esp\esp-idf\export.ps1` en la
 
 - Nueva pantalla completa de WiFi por swipe (izquierda), independiente del drawer.
 - Permite abrir configuración rápida sin entrar al menú de apps.
+
+
+## Seleccionar red WiFi desde UI (scan + teclado)
+
+Ahora hay dos formas dentro de la UI para configurar WiFi:
+1. **Drawer Smart Menu** (botón `W` / swipe derecha-arriba)
+2. **Pantalla Swipe WiFi** (swipe izquierda)
+
+En ambas puedes:
+- tocar **Scan** para escanear redes disponibles,
+- seleccionar una red de la lista (dropdown),
+- escribir/ajustar password con teclado virtual,
+- tocar **Guardar** para conectar.

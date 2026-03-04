@@ -230,6 +230,67 @@ static void wifi_reconnect_and_sync_task(void *arg)
     vTaskDelete(NULL);
 }
 
+
+static void ui_wifi_scan_handler(void)
+{
+    if (!s_wifi_started) {
+        ESP_LOGW(TAG, "Scan WiFi ignorado: WiFi aún no iniciado.");
+        ui_clock_set_scan_results("(wifi no iniciado)");
+        return;
+    }
+
+    wifi_scan_config_t scan_config = {
+        .ssid = 0,
+        .bssid = 0,
+        .channel = 0,
+        .show_hidden = false,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time = {
+            .active = {
+                .min = 40,
+                .max = 120,
+            },
+        },
+    };
+
+    ESP_LOGI(TAG, "Iniciando escaneo WiFi desde UI...");
+    esp_err_t err = esp_wifi_scan_start(&scan_config, true);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error en escaneo WiFi: %s", esp_err_to_name(err));
+        ui_clock_set_scan_results("(error scan)");
+        return;
+    }
+
+    uint16_t ap_num = 0;
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_num));
+    if (ap_num == 0) {
+        ui_clock_set_scan_results("(sin redes)");
+        return;
+    }
+
+    if (ap_num > 20) ap_num = 20;
+    wifi_ap_record_t ap_records[20] = {0};
+    uint16_t ap_count = ap_num;
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_records));
+
+    char options[700] = {0};
+    size_t used = 0;
+    for (uint16_t i = 0; i < ap_count; i++) {
+        const char *ssid = (const char *)ap_records[i].ssid;
+        if (!ssid || ssid[0] == '\0') continue;
+
+        int n = snprintf(options + used, sizeof(options) - used, "%s%s", used ? "\n" : "", ssid);
+        if (n <= 0 || (size_t)n >= (sizeof(options) - used)) break;
+        used += (size_t)n;
+    }
+
+    if (used == 0) {
+        ui_clock_set_scan_results("(sin SSID visible)");
+    } else {
+        ui_clock_set_scan_results(options);
+    }
+}
+
 static void ui_wifi_save_handler(const char *ssid, const char *pass)
 {
     if (!ssid || strlen(ssid) == 0) {
@@ -279,9 +340,11 @@ void app_main(void)
 
     ui_clock_create();
     ui_clock_set_wifi_callback(ui_wifi_save_handler);
+    ui_clock_set_wifi_scan_callback(ui_wifi_scan_handler);
     ui_clock_prefill_wifi(s_wifi_ssid, s_wifi_pass);
 
     if (wifi_connect_blocking() == ESP_OK) {
+        ui_wifi_scan_handler();
         sntp_sync_time();
     } else {
         ESP_LOGW(TAG, "Sin WiFi: reloj quedará en --:--:-- hasta sincronizar tiempo.");

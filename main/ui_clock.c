@@ -27,16 +27,19 @@ static lv_obj_t *s_home_page = NULL;
 static lv_obj_t *s_wifi_page = NULL;
 static lv_obj_t *s_ta_ssid = NULL;
 static lv_obj_t *s_ta_pass = NULL;
+static lv_obj_t *s_dd_networks = NULL;
 
 /* Swipe full-screen WiFi page */
 static lv_obj_t *s_swipe_wifi = NULL;
 static lv_obj_t *s_swipe_ssid = NULL;
 static lv_obj_t *s_swipe_pass = NULL;
+static lv_obj_t *s_swipe_networks = NULL;
 
 /* Shared keyboard */
 static lv_obj_t *s_kb = NULL;
 
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
+static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
 
 static int16_t clamp16(int32_t v, int16_t min, int16_t max)
 {
@@ -186,6 +189,33 @@ static void btn_back_home_cb(lv_event_t *e)
     show_home_page();
 }
 
+
+static void dd_networks_changed_cb(lv_event_t *e)
+{
+    lv_obj_t *dd = lv_event_get_target(e);
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code != LV_EVENT_VALUE_CHANGED) return;
+
+    char ssid[64] = {0};
+    lv_dropdown_get_selected_str(dd, ssid, sizeof(ssid));
+    if (ssid[0] == '\0') return;
+
+    if (s_ta_ssid) lv_textarea_set_text(s_ta_ssid, ssid);
+    if (s_swipe_ssid) lv_textarea_set_text(s_swipe_ssid, ssid);
+    ESP_LOGI(TAG_UI, "SSID seleccionado desde lista: %s", ssid);
+}
+
+static void btn_scan_wifi_cb(lv_event_t *e)
+{
+    (void)e;
+    if (s_wifi_scan_cb) {
+        ESP_LOGI(TAG_UI, "Solicitando escaneo WiFi...");
+        s_wifi_scan_cb();
+    } else {
+        ESP_LOGW(TAG_UI, "No hay callback de escaneo registrado");
+    }
+}
+
 static void screen_gesture_open_cb(lv_event_t *e)
 {
     lv_indev_t *indev = lv_event_get_indev(e);
@@ -293,6 +323,20 @@ void ui_clock_create(void)
     lv_label_set_text(wifi_title, LV_SYMBOL_WIFI " Config WiFi");
     lv_obj_align(wifi_title, LV_ALIGN_TOP_LEFT, 2, 0);
 
+    s_dd_networks = lv_dropdown_create(s_wifi_page);
+    lv_obj_set_width(s_dd_networks, 136);
+    lv_obj_align(s_dd_networks, LV_ALIGN_TOP_LEFT, 2, 24);
+    lv_dropdown_set_options(s_dd_networks, "(sin escaneo)");
+    lv_obj_add_event_cb(s_dd_networks, dd_networks_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t *btn_scan = lv_button_create(s_wifi_page);
+    lv_obj_set_size(btn_scan, 56, 26);
+    lv_obj_align(btn_scan, LV_ALIGN_TOP_RIGHT, -2, 24);
+    lv_obj_add_event_cb(btn_scan, btn_scan_wifi_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *scan_lbl = lv_label_create(btn_scan);
+    lv_label_set_text(scan_lbl, "Scan");
+    lv_obj_center(scan_lbl);
+
     lv_obj_t *btn_back = lv_button_create(s_wifi_page);
     lv_obj_set_size(btn_back, 56, 26);
     lv_obj_align(btn_back, LV_ALIGN_TOP_RIGHT, -2, -2);
@@ -303,13 +347,13 @@ void ui_clock_create(void)
 
     s_ta_ssid = lv_textarea_create(s_wifi_page);
     lv_obj_set_width(s_ta_ssid, 196);
-    lv_obj_align(s_ta_ssid, LV_ALIGN_TOP_MID, 0, 28);
+    lv_obj_align(s_ta_ssid, LV_ALIGN_TOP_MID, 0, 58);
     lv_textarea_set_placeholder_text(s_ta_ssid, "SSID");
     lv_obj_add_event_cb(s_ta_ssid, ta_focus_cb, LV_EVENT_FOCUSED, NULL);
 
     s_ta_pass = lv_textarea_create(s_wifi_page);
     lv_obj_set_width(s_ta_pass, 196);
-    lv_obj_align(s_ta_pass, LV_ALIGN_TOP_MID, 0, 74);
+    lv_obj_align(s_ta_pass, LV_ALIGN_TOP_MID, 0, 102);
     lv_textarea_set_placeholder_text(s_ta_pass, "Password");
     lv_textarea_set_password_mode(s_ta_pass, true);
     lv_obj_add_event_cb(s_ta_pass, ta_focus_cb, LV_EVENT_FOCUSED, NULL);
@@ -345,15 +389,29 @@ void ui_clock_create(void)
     lv_label_set_text(sw_hint, "Desliza der/arriba para volver al reloj");
     lv_obj_align(sw_hint, LV_ALIGN_TOP_MID, 0, 28);
 
+    s_swipe_networks = lv_dropdown_create(s_swipe_wifi);
+    lv_obj_set_width(s_swipe_networks, 150);
+    lv_obj_align(s_swipe_networks, LV_ALIGN_TOP_LEFT, 12, 54);
+    lv_dropdown_set_options(s_swipe_networks, "(sin escaneo)");
+    lv_obj_add_event_cb(s_swipe_networks, dd_networks_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t *sw_scan = lv_button_create(s_swipe_wifi);
+    lv_obj_set_size(sw_scan, 62, 30);
+    lv_obj_align(sw_scan, LV_ALIGN_TOP_RIGHT, -12, 54);
+    lv_obj_add_event_cb(sw_scan, btn_scan_wifi_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *sw_scan_lbl = lv_label_create(sw_scan);
+    lv_label_set_text(sw_scan_lbl, "Scan");
+    lv_obj_center(sw_scan_lbl);
+
     s_swipe_ssid = lv_textarea_create(s_swipe_wifi);
     lv_obj_set_width(s_swipe_ssid, 214);
-    lv_obj_align(s_swipe_ssid, LV_ALIGN_TOP_MID, 0, 58);
+    lv_obj_align(s_swipe_ssid, LV_ALIGN_TOP_MID, 0, 95);
     lv_textarea_set_placeholder_text(s_swipe_ssid, "SSID");
     lv_obj_add_event_cb(s_swipe_ssid, ta_focus_cb, LV_EVENT_FOCUSED, NULL);
 
     s_swipe_pass = lv_textarea_create(s_swipe_wifi);
     lv_obj_set_width(s_swipe_pass, 214);
-    lv_obj_align(s_swipe_pass, LV_ALIGN_TOP_MID, 0, 105);
+    lv_obj_align(s_swipe_pass, LV_ALIGN_TOP_MID, 0, 142);
     lv_textarea_set_placeholder_text(s_swipe_pass, "Password");
     lv_textarea_set_password_mode(s_swipe_pass, true);
     lv_obj_add_event_cb(s_swipe_pass, ta_focus_cb, LV_EVENT_FOCUSED, NULL);
@@ -395,6 +453,20 @@ void ui_clock_set_accel(int16_t x, int16_t y, bool valid)
 void ui_clock_set_wifi_callback(ui_wifi_save_cb_t cb)
 {
     s_wifi_cb = cb;
+}
+
+
+void ui_clock_set_wifi_scan_callback(ui_wifi_scan_cb_t cb)
+{
+    s_wifi_scan_cb = cb;
+}
+
+void ui_clock_set_scan_results(const char *options_newline)
+{
+    const char *opts = (options_newline && options_newline[0]) ? options_newline : "(sin redes)";
+    if (s_dd_networks) lv_dropdown_set_options(s_dd_networks, opts);
+    if (s_swipe_networks) lv_dropdown_set_options(s_swipe_networks, opts);
+    ESP_LOGI(TAG_UI, "Lista de redes WiFi actualizada en UI");
 }
 
 void ui_clock_prefill_wifi(const char *ssid, const char *pass)
