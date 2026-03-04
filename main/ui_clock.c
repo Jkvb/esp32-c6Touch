@@ -34,6 +34,7 @@ static uint8_t s_last_rot_quadrant = 0;
 static uint8_t s_rot_candidate = 0;
 static uint8_t s_rot_stable_count = 0;
 static bool s_swipe_handled = false;
+static lv_point_t s_press_start = {0, 0};
 
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
@@ -67,6 +68,14 @@ static void tile_press_cb(lv_event_t *e)
 {
     (void)e;
     s_swipe_handled = false;
+
+    lv_indev_t *indev = lv_indev_active();
+    if (indev) {
+        lv_indev_get_point(indev, &s_press_start);
+    } else {
+        s_press_start.x = 0;
+        s_press_start.y = 0;
+    }
 }
 
 static void tile_pressing_cb(lv_event_t *e)
@@ -77,21 +86,23 @@ static void tile_pressing_cb(lv_event_t *e)
     lv_indev_t *indev = lv_indev_active();
     if (!indev) return;
 
-    lv_point_t vect = {0};
-    lv_indev_get_vect(indev, &vect);
+    lv_point_t cur = {0};
+    lv_indev_get_point(indev, &cur);
 
-    int16_t ax = vect.x >= 0 ? vect.x : -vect.x;
-    int16_t ay = vect.y >= 0 ? vect.y : -vect.y;
+    int16_t dx = (int16_t)(cur.x - s_press_start.x);
+    int16_t dy = (int16_t)(cur.y - s_press_start.y);
+    int16_t adx = dx >= 0 ? dx : -dx;
+    int16_t ady = dy >= 0 ? dy : -dy;
 
-    if (ax < 12 || ax < (ay + 4)) {
+    if (adx < 22 || adx < (ady + 8)) {
         return;
     }
 
-    if (vect.x < 0 && s_active_tile < 4) {
-        go_to_tile((uint8_t)(s_active_tile + 1), "swipe corto");
+    if (dx < 0 && s_active_tile < 4) {
+        go_to_tile((uint8_t)(s_active_tile + 1), "swipe drag");
         s_swipe_handled = true;
-    } else if (vect.x > 0 && s_active_tile > 0) {
-        go_to_tile((uint8_t)(s_active_tile - 1), "swipe corto");
+    } else if (dx > 0 && s_active_tile > 0) {
+        go_to_tile((uint8_t)(s_active_tile - 1), "swipe drag");
         s_swipe_handled = true;
     }
 }
@@ -101,6 +112,7 @@ static void tile_release_cb(lv_event_t *e)
     (void)e;
     s_swipe_handled = false;
 }
+
 static void tile_gesture_cb(lv_event_t *e)
 {
     (void)e;
@@ -164,6 +176,10 @@ static void update_clock_rotation_from_accel(void)
     lv_obj_set_style_transform_pivot_x(s_time_lbl, lv_obj_get_width(s_time_lbl) / 2, 0);
     lv_obj_set_style_transform_pivot_y(s_time_lbl, 22, 0);
     lv_obj_set_style_transform_rotation(s_time_lbl, deg10, 0);
+
+    lv_obj_set_style_transform_pivot_x(s_brand_lbl, lv_obj_get_width(s_brand_lbl) / 2, 0);
+    lv_obj_set_style_transform_pivot_y(s_brand_lbl, 10, 0);
+    lv_obj_set_style_transform_rotation(s_brand_lbl, deg10, 0);
 
     ESP_LOGI(TAG_UI, "Rotación reloj=%d° (ax=%d ay=%d)", (int)(deg10 / 10), (int)s_ax, (int)s_ay);
 }
