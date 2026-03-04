@@ -53,6 +53,9 @@ static lv_obj_t *s_touch_cross_h = NULL;
 static lv_obj_t *s_touch_cross_v = NULL;
 static lv_obj_t *s_touch_x_lbl = NULL;
 static lv_obj_t *s_touch_y_lbl = NULL;
+static int16_t s_touch_dbg_last_x = -1;
+static int16_t s_touch_dbg_last_y = -1;
+static uint32_t s_touch_dbg_update_count = 0;
 
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
@@ -146,8 +149,6 @@ static void tile_pressing_cb(lv_event_t *e)
     int16_t dx_sum3 = swipe_dx_window_push_and_sum(dx_step);
     int16_t adx_sum3 = dx_sum3 >= 0 ? dx_sum3 : -dx_sum3;
 
-    ESP_LOGI(TAG_UI, "Swipe drag step_dx=%d sum3=%d (count=%u)", (int)dx_step, (int)dx_sum3, (unsigned)s_swipe_dx_count);
-
     if (adx_sum3 < SWIPE_NAV_DELTA_PX) {
         return;
     }
@@ -186,18 +187,21 @@ static void tile_release_cb(lv_event_t *e)
     }
     int16_t adx_sum3 = dx_sum3 >= 0 ? dx_sum3 : -dx_sum3;
 
-    if (s_swipe_consumed || adx_sum3 < SWIPE_NAV_DELTA_PX) {
+    bool by_sum3 = (adx_sum3 >= SWIPE_NAV_DELTA_PX);
+    bool by_total = (adx >= SWIPE_NAV_DELTA_PX);
+    if (s_swipe_consumed || (!by_sum3 && !by_total)) {
         s_swipe_consumed = false;
         swipe_dx_window_reset();
         return;
     }
 
-    if (dx_sum3 < 0 && s_active_tile < 4) {
-        go_to_tile((uint8_t)(s_active_tile + 1), "swipe release sum3");
-        ESP_LOGI(TAG_UI, "Swipe release aceptado -> sig pantalla dx=%d dy=%d sum3=%d |adx|=%d |ady|=%d", (int)dx, (int)dy, (int)dx_sum3, (int)adx, (int)ady);
-    } else if (dx_sum3 > 0 && s_active_tile > 0) {
-        go_to_tile((uint8_t)(s_active_tile - 1), "swipe release sum3");
-        ESP_LOGI(TAG_UI, "Swipe release aceptado -> pantalla ant dx=%d dy=%d sum3=%d |adx|=%d |ady|=%d", (int)dx, (int)dy, (int)dx_sum3, (int)adx, (int)ady);
+    int16_t dir_dx = by_sum3 ? dx_sum3 : dx;
+    if (dir_dx < 0 && s_active_tile < 4) {
+        go_to_tile((uint8_t)(s_active_tile + 1), by_sum3 ? "swipe release sum3" : "swipe release total");
+        ESP_LOGI(TAG_UI, "Swipe release aceptado -> sig pantalla dx=%d dy=%d sum3=%d total=%d", (int)dx, (int)dy, (int)dx_sum3, (int)dx);
+    } else if (dir_dx > 0 && s_active_tile > 0) {
+        go_to_tile((uint8_t)(s_active_tile - 1), by_sum3 ? "swipe release sum3" : "swipe release total");
+        ESP_LOGI(TAG_UI, "Swipe release aceptado -> pantalla ant dx=%d dy=%d sum3=%d total=%d", (int)dx, (int)dy, (int)dx_sum3, (int)dx);
     }
 
     s_swipe_consumed = false;
@@ -428,6 +432,8 @@ void ui_clock_set_touch_debug(int16_t x, int16_t y, bool pressed)
     if (!pressed) {
         lv_obj_add_flag(s_touch_cross_h, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(s_touch_cross_v, LV_OBJ_FLAG_HIDDEN);
+        s_touch_dbg_last_x = -1;
+        s_touch_dbg_last_y = -1;
         return;
     }
 
@@ -441,15 +447,18 @@ void ui_clock_set_touch_debug(int16_t x, int16_t y, bool pressed)
 
     int16_t cx = x < 8 ? 0 : (int16_t)(x - 8);
     int16_t cy = y < 8 ? 0 : (int16_t)(y - 8);
-    lv_obj_set_pos(s_touch_cross_h, cx, y);
-    lv_obj_set_pos(s_touch_cross_v, x, cy);
+    if (x != s_touch_dbg_last_x || y != s_touch_dbg_last_y) {
+        lv_obj_set_pos(s_touch_cross_h, cx, y);
+        lv_obj_set_pos(s_touch_cross_v, x, cy);
+        s_touch_dbg_last_x = x;
+        s_touch_dbg_last_y = y;
+    }
 
-    char bx[24];
-    char by[24];
-    snprintf(bx, sizeof(bx), "X:%d", (int)x);
-    snprintf(by, sizeof(by), "Y:%d", (int)y);
-    lv_label_set_text(s_touch_x_lbl, bx);
-    lv_label_set_text(s_touch_y_lbl, by);
+    s_touch_dbg_update_count++;
+    if ((s_touch_dbg_update_count % 4U) == 0U) {
+        lv_label_set_text_fmt(s_touch_x_lbl, "X:%d", (int)x);
+        lv_label_set_text_fmt(s_touch_y_lbl, "Y:%d", (int)y);
+    }
 #endif
 }
 
