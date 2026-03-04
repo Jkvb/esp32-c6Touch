@@ -97,15 +97,17 @@ static void tile_pressing_cb(lv_event_t *e)
     int16_t adx = dx >= 0 ? dx : -dx;
     int16_t ady = dy >= 0 ? dy : -dy;
 
-    if (adx < 28 || adx < (ady + 8)) {
+    if (adx < 16 || adx < (ady + 4)) {
         return;
     }
 
     if (dx < 0 && s_active_tile < 4) {
         go_to_tile((uint8_t)(s_active_tile + 1), "swipe drag");
+        ESP_LOGI(TAG_UI, "Swipe drag aceptado -> sig pantalla (dx=%d)", (int)dx);
         s_swipe_consumed = true;
     } else if (dx > 0 && s_active_tile > 0) {
         go_to_tile((uint8_t)(s_active_tile - 1), "swipe drag");
+        ESP_LOGI(TAG_UI, "Swipe drag aceptado -> pantalla ant (dx=%d)", (int)dx);
         s_swipe_consumed = true;
     }
 }
@@ -125,15 +127,19 @@ static void tile_release_cb(lv_event_t *e)
     int16_t adx = dx >= 0 ? dx : -dx;
     int16_t ady = dy >= 0 ? dy : -dy;
 
-    if (s_swipe_consumed || adx < 20 || adx < (ady + 6)) {
+    ESP_LOGI(TAG_UI, "Swipe release dx=%d dy=%d |adx|=%d |ady|=%d consumed=%d", (int)dx, (int)dy, (int)adx, (int)ady, (int)s_swipe_consumed);
+
+    if (s_swipe_consumed || adx < 12 || adx < (ady + 4)) {
         s_swipe_consumed = false;
         return;
     }
 
     if (dx < 0 && s_active_tile < 4) {
         go_to_tile((uint8_t)(s_active_tile + 1), "swipe snap");
+        ESP_LOGI(TAG_UI, "Swipe release aceptado -> sig pantalla (dx=%d)", (int)dx);
     } else if (dx > 0 && s_active_tile > 0) {
         go_to_tile((uint8_t)(s_active_tile - 1), "swipe snap");
+        ESP_LOGI(TAG_UI, "Swipe release aceptado -> pantalla ant (dx=%d)", (int)dx);
     }
 
     s_swipe_consumed = false;
