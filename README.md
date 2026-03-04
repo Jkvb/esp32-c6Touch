@@ -554,3 +554,35 @@ Este script hace:
 1. Ejecuta `C:\esp\esp-idf\export.ps1`
 2. Verifica `idf.py --version`
 3. Ejecuta `idf.py -p COM6 flash monitor`
+
+
+## Caso real: `main` al día pero faltan scripts y `idf.py`
+
+Si te pasa esto:
+- `git pull` => `Already up to date`
+- `.\tools\flash_monitor.ps1` no existe
+- `idf.py` no reconocido
+
+usa este flujo (sin depender de scripts):
+
+```powershell
+cd C:\Users\jcarl\esp32\esp32-c6Touch
+
+# 1) Detecta si hay rama remota de trabajo con cambios
+
+git fetch --all --prune
+git branch -r
+
+# Si existe, cámbiate (ejemplo real visto en tus logs)
+# git checkout -B codex/add-accelerometer-controlled-clock origin/codex/add-accelerometer-controlled-clock
+
+# 2) Activa ESP-IDF en ESTA misma terminal
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+C:\esp\esp-idf\export.ps1
+idf.py --version
+
+# 3) Flashea directo (aunque no existan scripts .ps1)
+idf.py -p COM6 flash monitor
+```
+
+Si `idf.py --version` falla, vuelve a ejecutar `C:\esp\esp-idf\export.ps1` en la misma ventana.
