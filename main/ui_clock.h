@@ -12,3 +12,4 @@ void ui_clock_set_wifi_callback(ui_wifi_save_cb_t cb);
 void ui_clock_set_wifi_scan_callback(ui_wifi_scan_cb_t cb);
 void ui_clock_set_scan_results(const char *options_newline);
 void ui_clock_prefill_wifi(const char *ssid, const char *pass);
+void ui_clock_set_touch_debug(int16_t x, int16_t y, bool pressed);

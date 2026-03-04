@@ -11,6 +11,7 @@
 #include "driver/gpio.h"
 #include "driver/i2c.h"
 #include "accel_qmi8658.h"
+#include "ui_clock.h"
 
 static const char *TAG = "DISP";
 
@@ -63,7 +64,9 @@ static uint32_t s_touch_raw_logs = 0;
 static int s_touch_i2c_sda = TOUCH_I2C_SDA_DEFAULT;
 static int s_touch_i2c_scl = TOUCH_I2C_SCL_DEFAULT;
 static bool s_touch_i2c_installed = false;
-
+static uint16_t s_touch_start_x = 0;
+static uint16_t s_touch_start_y = 0;
+static bool s_touch_has_start = false;
 
 static esp_err_t touch_i2c_ping(uint8_t addr);
 
@@ -254,14 +257,29 @@ static void lvgl_touch_read_cb(lv_indev_t * indev, lv_indev_data_t * data)
             s_touch_reads++;
 
             if (pressed && !was_pressed) {
+                s_touch_start_x = x;
+                s_touch_start_y = y;
+                s_touch_has_start = true;
                 ESP_LOGI(TAG, "Touch DOWN x=%u y=%u", (unsigned)x, (unsigned)y);
             } else if (!pressed && was_pressed) {
-                ESP_LOGI(TAG, "Touch UP x=%u y=%u", (unsigned)old_x, (unsigned)old_y);
+                if (s_touch_has_start) {
+                    int dx = (int)old_x - (int)s_touch_start_x;
+                    int dy = (int)old_y - (int)s_touch_start_y;
+                    ESP_LOGI(TAG, "Touch UP x=%u y=%u (inicio=%u,%u dx=%d dy=%d)",
+                             (unsigned)old_x, (unsigned)old_y,
+                             (unsigned)s_touch_start_x, (unsigned)s_touch_start_y,
+                             dx, dy);
+                } else {
+                    ESP_LOGI(TAG, "Touch UP x=%u y=%u", (unsigned)old_x, (unsigned)old_y);
+                }
+                s_touch_has_start = false;
             } else if (pressed && (old_x != x || old_y != y) && ((s_touch_reads % 10U) == 0U)) {
                 ESP_LOGI(TAG, "Touch MOVE x=%u y=%u", (unsigned)x, (unsigned)y);
             } else if ((s_touch_reads % 50U) == 1U && pressed) {
                 ESP_LOGI(TAG, "Touch activo x=%u y=%u", (unsigned)x, (unsigned)y);
             }
+
+            ui_clock_set_touch_debug((int16_t)s_touch_x, (int16_t)s_touch_y, s_touch_pressed);
         } else {
             s_touch_read_errors++;
             if (s_touch_read_errors == 1 || (s_touch_read_errors % 25U) == 0U) {

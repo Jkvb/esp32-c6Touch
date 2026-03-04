@@ -41,6 +41,16 @@ static const int16_t SWIPE_RELEASE_MIN_X = 6;
 /* Permite swipe diagonal leve (no exigir que X gane por mucho a Y). */
 static const int16_t SWIPE_VERTICAL_REJECT_GAP = 12;
 
+
+#define UI_TOUCH_DEBUG_OVERLAY 1
+#define UI_TOUCH_DBG_W 170
+#define UI_TOUCH_DBG_H 320
+
+static lv_obj_t *s_touch_cross_h = NULL;
+static lv_obj_t *s_touch_cross_v = NULL;
+static lv_obj_t *s_touch_x_lbl = NULL;
+static lv_obj_t *s_touch_y_lbl = NULL;
+
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
 
@@ -333,7 +343,70 @@ void ui_clock_create(void)
     create_info_tile(s_tiles[4], "Pantalla 5", "Debug", "(maqueta touch)");
 
     lv_tileview_set_tile_by_index(s_tileview, 0, 0, LV_ANIM_OFF);
+
+#if UI_TOUCH_DEBUG_OVERLAY
+    s_touch_cross_h = lv_obj_create(scr);
+    lv_obj_remove_style_all(s_touch_cross_h);
+    lv_obj_set_size(s_touch_cross_h, 17, 2);
+    lv_obj_set_style_bg_color(s_touch_cross_h, lv_color_hex(0xFF0000), 0);
+    lv_obj_set_style_bg_opa(s_touch_cross_h, LV_OPA_COVER, 0);
+    lv_obj_add_flag(s_touch_cross_h, LV_OBJ_FLAG_HIDDEN);
+
+    s_touch_cross_v = lv_obj_create(scr);
+    lv_obj_remove_style_all(s_touch_cross_v);
+    lv_obj_set_size(s_touch_cross_v, 2, 17);
+    lv_obj_set_style_bg_color(s_touch_cross_v, lv_color_hex(0x00FF00), 0);
+    lv_obj_set_style_bg_opa(s_touch_cross_v, LV_OPA_COVER, 0);
+    lv_obj_add_flag(s_touch_cross_v, LV_OBJ_FLAG_HIDDEN);
+
+    s_touch_x_lbl = lv_label_create(scr);
+    lv_label_set_text(s_touch_x_lbl, "X:0");
+    lv_obj_set_style_text_color(s_touch_x_lbl, lv_color_hex(0xFF0000), 0);
+    lv_obj_align(s_touch_x_lbl, LV_ALIGN_TOP_LEFT, 3, 3);
+
+    s_touch_y_lbl = lv_label_create(scr);
+    lv_label_set_text(s_touch_y_lbl, "Y:0");
+    lv_obj_set_style_text_color(s_touch_y_lbl, lv_color_hex(0x00FF00), 0);
+    lv_obj_align(s_touch_y_lbl, LV_ALIGN_TOP_LEFT, 52, 3);
+#endif
+
     lv_timer_create(clock_timer_cb, 200, NULL);
+}
+
+
+void ui_clock_set_touch_debug(int16_t x, int16_t y, bool pressed)
+{
+#if UI_TOUCH_DEBUG_OVERLAY
+    if (!s_touch_cross_h || !s_touch_cross_v || !s_touch_x_lbl || !s_touch_y_lbl) {
+        return;
+    }
+
+    if (!pressed) {
+        lv_obj_add_flag(s_touch_cross_h, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_touch_cross_v, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x > (UI_TOUCH_DBG_W - 1)) x = (UI_TOUCH_DBG_W - 1);
+    if (y > (UI_TOUCH_DBG_H - 1)) y = (UI_TOUCH_DBG_H - 1);
+
+    lv_obj_remove_flag(s_touch_cross_h, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(s_touch_cross_v, LV_OBJ_FLAG_HIDDEN);
+
+    int16_t cx = x < 8 ? 0 : (int16_t)(x - 8);
+    int16_t cy = y < 8 ? 0 : (int16_t)(y - 8);
+    lv_obj_set_pos(s_touch_cross_h, cx, y);
+    lv_obj_set_pos(s_touch_cross_v, x, cy);
+
+    char bx[24];
+    char by[24];
+    snprintf(bx, sizeof(bx), "X:%d", (int)x);
+    snprintf(by, sizeof(by), "Y:%d", (int)y);
+    lv_label_set_text(s_touch_x_lbl, bx);
+    lv_label_set_text(s_touch_y_lbl, by);
+#endif
 }
 
 void ui_clock_set_accel(int16_t x, int16_t y, bool valid)
