@@ -34,6 +34,7 @@ static uint8_t s_last_rot_quadrant = 0;
 static uint8_t s_rot_candidate = 0;
 static uint8_t s_rot_stable_count = 0;
 static lv_point_t s_press_start = {0, 0};
+static bool s_swipe_consumed = false;
 
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
@@ -66,6 +67,7 @@ static void go_to_tile(uint8_t next, const char *reason)
 static void tile_press_cb(lv_event_t *e)
 {
     (void)e;
+    s_swipe_consumed = false;
 
     lv_indev_t *indev = lv_indev_active();
     if (indev) {
@@ -79,6 +81,33 @@ static void tile_press_cb(lv_event_t *e)
 static void tile_pressing_cb(lv_event_t *e)
 {
     (void)e;
+
+    if (s_swipe_consumed) {
+        return;
+    }
+
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev) return;
+
+    lv_point_t cur = {0};
+    lv_indev_get_point(indev, &cur);
+
+    int16_t dx = (int16_t)(cur.x - s_press_start.x);
+    int16_t dy = (int16_t)(cur.y - s_press_start.y);
+    int16_t adx = dx >= 0 ? dx : -dx;
+    int16_t ady = dy >= 0 ? dy : -dy;
+
+    if (adx < 28 || adx < (ady + 8)) {
+        return;
+    }
+
+    if (dx < 0 && s_active_tile < 4) {
+        go_to_tile((uint8_t)(s_active_tile + 1), "swipe drag");
+        s_swipe_consumed = true;
+    } else if (dx > 0 && s_active_tile > 0) {
+        go_to_tile((uint8_t)(s_active_tile - 1), "swipe drag");
+        s_swipe_consumed = true;
+    }
 }
 
 static void tile_release_cb(lv_event_t *e)
@@ -96,7 +125,8 @@ static void tile_release_cb(lv_event_t *e)
     int16_t adx = dx >= 0 ? dx : -dx;
     int16_t ady = dy >= 0 ? dy : -dy;
 
-    if (adx < 20 || adx < (ady + 6)) {
+    if (s_swipe_consumed || adx < 20 || adx < (ady + 6)) {
+        s_swipe_consumed = false;
         return;
     }
 
@@ -105,6 +135,8 @@ static void tile_release_cb(lv_event_t *e)
     } else if (dx > 0 && s_active_tile > 0) {
         go_to_tile((uint8_t)(s_active_tile - 1), "swipe snap");
     }
+
+    s_swipe_consumed = false;
 }
 
 static void tile_gesture_cb(lv_event_t *e)
@@ -116,8 +148,10 @@ static void tile_gesture_cb(lv_event_t *e)
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
     if (dir == LV_DIR_LEFT && s_active_tile < 4) {
         go_to_tile((uint8_t)(s_active_tile + 1), "gesture");
+        s_swipe_consumed = true;
     } else if (dir == LV_DIR_RIGHT && s_active_tile > 0) {
         go_to_tile((uint8_t)(s_active_tile - 1), "gesture");
+        s_swipe_consumed = true;
     }
 }
 
@@ -250,6 +284,11 @@ void ui_clock_create(void)
 
     for (uint8_t i = 0; i < 5; i++) {
         s_tiles[i] = lv_tileview_add_tile(s_tileview, i, 0, LV_DIR_HOR);
+        lv_obj_add_flag(s_tiles[i], LV_OBJ_FLAG_GESTURE_BUBBLE);
+        lv_obj_add_event_cb(s_tiles[i], tile_press_cb, LV_EVENT_PRESSED, NULL);
+        lv_obj_add_event_cb(s_tiles[i], tile_pressing_cb, LV_EVENT_PRESSING, NULL);
+        lv_obj_add_event_cb(s_tiles[i], tile_release_cb, LV_EVENT_RELEASED, NULL);
+        lv_obj_add_event_cb(s_tiles[i], tile_gesture_cb, LV_EVENT_GESTURE, NULL);
     }
 
     /* Pantalla 1: Reloj adaptado a 170x320 */
