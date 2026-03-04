@@ -174,7 +174,7 @@ static esp_err_t wifi_connect_blocking(void)
     return ESP_FAIL;
 }
 
-static void sntp_sync_time(void)
+static void start_sntp_sync(void)
 {
     ESP_LOGI(TAG, "Iniciando SNTP (%s)", CONFIG_IAWICHU_NTP_SERVER);
     esp_sntp_stop();
@@ -222,7 +222,7 @@ static void wifi_reconnect_and_sync_task(void *arg)
                                            pdMS_TO_TICKS(20000));
 
     if (bits & WIFI_CONNECTED_BIT) {
-        sntp_sync_time();
+        start_sntp_sync();
     } else {
         ESP_LOGW(TAG, "No se pudo conectar con credenciales guardadas desde UI.");
     }
@@ -345,7 +345,7 @@ void app_main(void)
 
     if (wifi_connect_blocking() == ESP_OK) {
         ui_wifi_scan_handler();
-        sntp_sync_time();
+        start_sntp_sync();
     } else {
         ESP_LOGW(TAG, "Sin WiFi: reloj quedará en --:--:-- hasta sincronizar tiempo.");
     }
