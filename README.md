@@ -521,6 +521,7 @@ Si el touch no responde, en monitor debes ver trazas como:
 - `DISP: Touch MOVE x=... y=...`
 - `DISP: Touch UP x=... y=...`
 - `DISP: Touch read fallo (addr=0x..), err_count=...`
+- `DISP: Touch raw p=.. bytes=.. .. .. .. .. .. ..`
 - `DISP: Touch activo x=... y=...`
 
 Si no aparece ninguna, revisa cableado/driver touch, dirección I2C del panel y que no haya conflicto en I2C.
@@ -641,3 +642,5 @@ Además, el reloj ahora cambia color dinámicamente para confirmar que el pipeli
 - Se eliminó el menú WiFi complejo en pantalla (drawer/teclado) para priorizar estabilidad táctil.
 - Ahora hay 5 pantallas navegables por swipe horizontal.
 - La pantalla 1 muestra reloj adaptado a 170x320, y las pantallas 2-5 son de maqueta.
+
+- Ajuste visual: el texto del reloj se redujo ~40% para mejor encaje en 170x320.

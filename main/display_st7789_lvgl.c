@@ -58,6 +58,7 @@ static bool s_touch_ready = false;
 static uint32_t s_touch_reads = 0;
 static uint8_t s_touch_addr = TOUCH_CST816_ADDR;
 static uint32_t s_touch_read_errors = 0;
+static uint32_t s_touch_raw_logs = 0;
 
 static esp_timer_handle_t s_lv_tick_timer;
 
@@ -84,15 +85,16 @@ static esp_err_t touch_cst816_init(void)
         .clk_flags = 0,
     };
 
+    esp_err_t cfg_err = i2c_param_config(TOUCH_I2C_PORT, &cfg);
+    if (cfg_err != ESP_OK) {
+        ESP_LOGW(TAG, "Touch: i2c_param_config retorno %s", esp_err_to_name(cfg_err));
+    }
+
     esp_err_t install_err = i2c_driver_install(TOUCH_I2C_PORT, cfg.mode, 0, 0, 0);
     if (install_err == ESP_ERR_INVALID_STATE) {
         ESP_LOGI(TAG, "Touch: I2C ya inicializado en puerto %d, se conserva config actual", (int)TOUCH_I2C_PORT);
     } else if (install_err == ESP_OK) {
-        esp_err_t err = i2c_param_config(TOUCH_I2C_PORT, &cfg);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Touch: i2c_param_config fallo: %s", esp_err_to_name(err));
-            return err;
-        }
+        ESP_LOGI(TAG, "Touch: I2C instalado en puerto %d", (int)TOUCH_I2C_PORT);
     } else {
         ESP_LOGW(TAG, "Touch: i2c_driver_install fallo: %s", esp_err_to_name(install_err));
         return install_err;
@@ -121,8 +123,8 @@ static esp_err_t touch_cst816_init(void)
 
 static bool touch_cst816_read_point(uint16_t *x, uint16_t *y, bool *pressed)
 {
-    uint8_t reg = 0x02;
-    uint8_t data[6] = {0};
+    uint8_t reg = 0x01;
+    uint8_t data[7] = {0};
     esp_err_t err = i2c_master_write_read_device(TOUCH_I2C_PORT,
                                                   s_touch_addr,
                                                   &reg,
@@ -134,7 +136,10 @@ static bool touch_cst816_read_point(uint16_t *x, uint16_t *y, bool *pressed)
         return false;
     }
 
-    uint8_t points = data[1] & 0x0F;
+    uint8_t points = data[1] & 0x0F; /* CST816 layout */
+    if (points == 0) {
+        points = data[0] & 0x0F; /* FT6x36 layout fallback */
+    }
     if (points == 0) {
         *pressed = false;
         return true;
@@ -142,6 +147,27 @@ static bool touch_cst816_read_point(uint16_t *x, uint16_t *y, bool *pressed)
 
     uint16_t tx = (uint16_t)(((data[2] & 0x0F) << 8) | data[3]);
     uint16_t ty = (uint16_t)(((data[4] & 0x0F) << 8) | data[5]);
+
+    /* fallback FT6x36 positions when CST layout seems invalid */
+    if ((tx == 0 && ty == 0) || tx > 480 || ty > 480) {
+        tx = (uint16_t)(((data[1] & 0x0F) << 8) | data[2]);
+        ty = (uint16_t)(((data[3] & 0x0F) << 8) | data[4]);
+    }
+
+    if (s_touch_raw_logs < 12U) {
+        ESP_LOGI(TAG, "Touch raw p=%u bytes=%02X %02X %02X %02X %02X %02X %02X",
+                 (unsigned)points,
+                 (unsigned)data[0], (unsigned)data[1], (unsigned)data[2],
+                 (unsigned)data[3], (unsigned)data[4], (unsigned)data[5], (unsigned)data[6]);
+        s_touch_raw_logs++;
+    }
+
+    /* algunos controladores reportan eje intercambiado con este panel */
+    if (tx >= LCD_H_RES && ty < LCD_H_RES) {
+        uint16_t tmp = tx;
+        tx = ty;
+        ty = tmp;
+    }
 
     if (tx >= LCD_H_RES) tx = LCD_H_RES - 1;
     if (ty >= LCD_V_RES) ty = LCD_V_RES - 1;

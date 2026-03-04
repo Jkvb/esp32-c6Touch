@@ -74,15 +74,16 @@ esp_err_t accel_qmi8658_init(void)
         .clk_flags = 0,
     };
 
+    esp_err_t cfg_err = i2c_param_config(I2C_PORT_NUM, &cfg);
+    if (cfg_err != ESP_OK) {
+        ESP_LOGW(TAG, "i2c_param_config accel retorno %s", esp_err_to_name(cfg_err));
+    }
+
     esp_err_t install_err = i2c_driver_install(I2C_PORT_NUM, cfg.mode, 0, 0, 0);
     if (install_err == ESP_ERR_INVALID_STATE) {
         ESP_LOGI(TAG, "I2C ya inicializado en puerto %d, reutilizando config actual", (int)I2C_PORT_NUM);
     } else if (install_err == ESP_OK) {
-        esp_err_t err = i2c_param_config(I2C_PORT_NUM, &cfg);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "i2c_param_config accel fallo: %s", esp_err_to_name(err));
-            return err;
-        }
+        ESP_LOGI(TAG, "I2C accel instalado en puerto %d", (int)I2C_PORT_NUM);
     } else {
         ESP_LOGE(TAG, "No se pudo inicializar I2C para accel: %s", esp_err_to_name(install_err));
         return install_err;

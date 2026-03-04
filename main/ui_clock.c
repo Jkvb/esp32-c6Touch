@@ -6,12 +6,14 @@
 #include <string.h>
 #include <time.h>
 
-#if defined(LV_FONT_MONTSERRAT_48) && (LV_FONT_MONTSERRAT_48)
-  #define CLOCK_FONT (&lv_font_montserrat_48)
-#elif defined(LV_FONT_MONTSERRAT_40) && (LV_FONT_MONTSERRAT_40)
-  #define CLOCK_FONT (&lv_font_montserrat_40)
+#if defined(LV_FONT_MONTSERRAT_28) && (LV_FONT_MONTSERRAT_28)
+  #define CLOCK_FONT (&lv_font_montserrat_28)
+#elif defined(LV_FONT_MONTSERRAT_24) && (LV_FONT_MONTSERRAT_24)
+  #define CLOCK_FONT (&lv_font_montserrat_24)
 #elif defined(LV_FONT_MONTSERRAT_32) && (LV_FONT_MONTSERRAT_32)
   #define CLOCK_FONT (&lv_font_montserrat_32)
+#elif defined(LV_FONT_MONTSERRAT_40) && (LV_FONT_MONTSERRAT_40)
+  #define CLOCK_FONT (&lv_font_montserrat_40)
 #else
   #define CLOCK_FONT (LV_FONT_DEFAULT)
 #endif
