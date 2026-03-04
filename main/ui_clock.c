@@ -20,13 +20,22 @@ static volatile int16_t s_ax = 0;
 static volatile int16_t s_ay = 0;
 static volatile bool s_accel_valid = false;
 
+/* Drawer menu */
 static lv_obj_t *s_drawer = NULL;
 static lv_obj_t *s_menu_card = NULL;
 static lv_obj_t *s_home_page = NULL;
 static lv_obj_t *s_wifi_page = NULL;
 static lv_obj_t *s_ta_ssid = NULL;
 static lv_obj_t *s_ta_pass = NULL;
+
+/* Swipe full-screen WiFi page */
+static lv_obj_t *s_swipe_wifi = NULL;
+static lv_obj_t *s_swipe_ssid = NULL;
+static lv_obj_t *s_swipe_pass = NULL;
+
+/* Shared keyboard */
 static lv_obj_t *s_kb = NULL;
+
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 
 static int16_t clamp16(int32_t v, int16_t min, int16_t max)
@@ -36,11 +45,12 @@ static int16_t clamp16(int32_t v, int16_t min, int16_t max)
     return (int16_t)v;
 }
 
-static void hide_drawer(void)
+static void hide_all_overlays(void)
 {
     if (s_drawer) lv_obj_add_flag(s_drawer, LV_OBJ_FLAG_HIDDEN);
+    if (s_swipe_wifi) lv_obj_add_flag(s_swipe_wifi, LV_OBJ_FLAG_HIDDEN);
     if (s_kb) lv_obj_add_flag(s_kb, LV_OBJ_FLAG_HIDDEN);
-    ESP_LOGI(TAG_UI, "Drawer oculto");
+    ESP_LOGI(TAG_UI, "Overlays ocultos");
 }
 
 static void show_home_page(void)
@@ -60,8 +70,18 @@ static void show_drawer(void)
 {
     if (!s_drawer) return;
     lv_obj_clear_flag(s_drawer, LV_OBJ_FLAG_HIDDEN);
-    ESP_LOGI(TAG_UI, "Drawer abierto");
+    if (s_swipe_wifi) lv_obj_add_flag(s_swipe_wifi, LV_OBJ_FLAG_HIDDEN);
     show_home_page();
+    ESP_LOGI(TAG_UI, "Drawer abierto");
+}
+
+static void show_swipe_wifi_page(void)
+{
+    if (!s_swipe_wifi) return;
+    lv_obj_clear_flag(s_swipe_wifi, LV_OBJ_FLAG_HIDDEN);
+    if (s_drawer) lv_obj_add_flag(s_drawer, LV_OBJ_FLAG_HIDDEN);
+    if (s_kb) lv_obj_add_flag(s_kb, LV_OBJ_FLAG_HIDDEN);
+    ESP_LOGI(TAG_UI, "Pantalla WiFi por swipe abierta");
 }
 
 static void clock_timer_cb(lv_timer_t *t)
@@ -91,13 +111,6 @@ static void clock_timer_cb(lv_timer_t *t)
     }
 }
 
-static void btn_close_cb(lv_event_t *e)
-{
-    (void)e;
-    ESP_LOGI(TAG_UI, "Tap en cerrar menu");
-    hide_drawer();
-}
-
 static void kb_event_cb(lv_event_t *e)
 {
     lv_obj_t *kb = lv_event_get_target(e);
@@ -117,19 +130,39 @@ static void ta_focus_cb(lv_event_t *e)
     ESP_LOGI(TAG_UI, "Focus en input WiFi");
 }
 
-static void btn_save_cb(lv_event_t *e)
+static void save_credentials(const char *ssid, const char *pass)
 {
-    (void)e;
-    const char *ssid = lv_textarea_get_text(s_ta_ssid);
-    const char *pass = lv_textarea_get_text(s_ta_pass);
-
     ESP_LOGI(TAG_UI, "Guardar WiFi desde UI (ssid_len=%d pass_len=%d)", (int)strlen(ssid), (int)strlen(pass));
     if (s_wifi_cb) {
         s_wifi_cb(ssid, pass);
     } else {
         ESP_LOGW(TAG_UI, "s_wifi_cb es NULL, no se aplican credenciales");
     }
-    hide_drawer();
+}
+
+static void btn_save_drawer_cb(lv_event_t *e)
+{
+    (void)e;
+    const char *ssid = lv_textarea_get_text(s_ta_ssid);
+    const char *pass = lv_textarea_get_text(s_ta_pass);
+    save_credentials(ssid, pass);
+    hide_all_overlays();
+}
+
+static void btn_save_swipe_cb(lv_event_t *e)
+{
+    (void)e;
+    const char *ssid = lv_textarea_get_text(s_swipe_ssid);
+    const char *pass = lv_textarea_get_text(s_swipe_pass);
+    save_credentials(ssid, pass);
+    hide_all_overlays();
+}
+
+static void btn_close_cb(lv_event_t *e)
+{
+    (void)e;
+    ESP_LOGI(TAG_UI, "Tap cerrar overlay");
+    hide_all_overlays();
 }
 
 static void btn_open_cb(lv_event_t *e)
@@ -160,7 +193,10 @@ static void screen_gesture_open_cb(lv_event_t *e)
 
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
     ESP_LOGI(TAG_UI, "Gesture detectado dir=%d", (int)dir);
-    if (dir == LV_DIR_LEFT || dir == LV_DIR_RIGHT || dir == LV_DIR_TOP) {
+
+    if (dir == LV_DIR_LEFT) {
+        show_swipe_wifi_page();
+    } else if (dir == LV_DIR_RIGHT || dir == LV_DIR_TOP) {
         show_drawer();
     }
 }
@@ -176,7 +212,6 @@ void ui_clock_create(void)
 
     s_lbl = lv_label_create(scr);
     lv_label_set_text(s_lbl, "wichIA\n--:--:--");
-
     lv_obj_set_style_text_font(s_lbl, CLOCK_FONT, 0);
     lv_obj_set_style_text_color(s_lbl, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_text_align(s_lbl, LV_TEXT_ALIGN_CENTER, 0);
@@ -200,7 +235,7 @@ void ui_clock_create(void)
     lv_label_set_text(hint_lbl, "≡");
     lv_obj_center(hint_lbl);
 
-    /* Smartwatch-like drawer */
+    /* Drawer menu */
     s_drawer = lv_obj_create(scr);
     lv_obj_set_size(s_drawer, lv_pct(100), lv_pct(100));
     lv_obj_set_style_bg_color(s_drawer, lv_color_hex(0x000000), 0);
@@ -282,7 +317,7 @@ void ui_clock_create(void)
     lv_obj_t *btn_save = lv_button_create(s_wifi_page);
     lv_obj_set_size(btn_save, 94, 34);
     lv_obj_align(btn_save, LV_ALIGN_BOTTOM_LEFT, 4, -8);
-    lv_obj_add_event_cb(btn_save, btn_save_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(btn_save, btn_save_drawer_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *save_lbl = lv_label_create(btn_save);
     lv_label_set_text(save_lbl, "Guardar");
     lv_obj_center(save_lbl);
@@ -295,12 +330,56 @@ void ui_clock_create(void)
     lv_label_set_text(cancel_lbl, "Cerrar");
     lv_obj_center(cancel_lbl);
 
-    s_kb = lv_keyboard_create(s_drawer);
+    /* Swipe full-screen WiFi page */
+    s_swipe_wifi = lv_obj_create(scr);
+    lv_obj_set_size(s_swipe_wifi, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_bg_color(s_swipe_wifi, lv_color_hex(0x10131a), 0);
+    lv_obj_set_style_bg_opa(s_swipe_wifi, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_swipe_wifi, 0, 0);
+
+    lv_obj_t *sw_title = lv_label_create(s_swipe_wifi);
+    lv_label_set_text(sw_title, LV_SYMBOL_WIFI " WiFi rapido (Swipe)");
+    lv_obj_align(sw_title, LV_ALIGN_TOP_MID, 0, 8);
+
+    lv_obj_t *sw_hint = lv_label_create(s_swipe_wifi);
+    lv_label_set_text(sw_hint, "Desliza der/arriba para volver al reloj");
+    lv_obj_align(sw_hint, LV_ALIGN_TOP_MID, 0, 28);
+
+    s_swipe_ssid = lv_textarea_create(s_swipe_wifi);
+    lv_obj_set_width(s_swipe_ssid, 214);
+    lv_obj_align(s_swipe_ssid, LV_ALIGN_TOP_MID, 0, 58);
+    lv_textarea_set_placeholder_text(s_swipe_ssid, "SSID");
+    lv_obj_add_event_cb(s_swipe_ssid, ta_focus_cb, LV_EVENT_FOCUSED, NULL);
+
+    s_swipe_pass = lv_textarea_create(s_swipe_wifi);
+    lv_obj_set_width(s_swipe_pass, 214);
+    lv_obj_align(s_swipe_pass, LV_ALIGN_TOP_MID, 0, 105);
+    lv_textarea_set_placeholder_text(s_swipe_pass, "Password");
+    lv_textarea_set_password_mode(s_swipe_pass, true);
+    lv_obj_add_event_cb(s_swipe_pass, ta_focus_cb, LV_EVENT_FOCUSED, NULL);
+
+    lv_obj_t *sw_save = lv_button_create(s_swipe_wifi);
+    lv_obj_set_size(sw_save, 102, 36);
+    lv_obj_align(sw_save, LV_ALIGN_BOTTOM_LEFT, 12, -12);
+    lv_obj_add_event_cb(sw_save, btn_save_swipe_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *sw_save_lbl = lv_label_create(sw_save);
+    lv_label_set_text(sw_save_lbl, "Guardar");
+    lv_obj_center(sw_save_lbl);
+
+    lv_obj_t *sw_close = lv_button_create(s_swipe_wifi);
+    lv_obj_set_size(sw_close, 102, 36);
+    lv_obj_align(sw_close, LV_ALIGN_BOTTOM_RIGHT, -12, -12);
+    lv_obj_add_event_cb(sw_close, btn_close_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *sw_close_lbl = lv_label_create(sw_close);
+    lv_label_set_text(sw_close_lbl, "Cerrar");
+    lv_obj_center(sw_close_lbl);
+
+    s_kb = lv_keyboard_create(scr);
     lv_obj_set_size(s_kb, lv_pct(100), 120);
     lv_obj_align(s_kb, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_add_event_cb(s_kb, kb_event_cb, LV_EVENT_ALL, NULL);
 
-    hide_drawer();
+    hide_all_overlays();
     show_home_page();
 
     lv_timer_create(clock_timer_cb, 200, NULL);
@@ -322,4 +401,7 @@ void ui_clock_prefill_wifi(const char *ssid, const char *pass)
 {
     if (s_ta_ssid && ssid) lv_textarea_set_text(s_ta_ssid, ssid);
     if (s_ta_pass && pass) lv_textarea_set_text(s_ta_pass, pass);
+
+    if (s_swipe_ssid && ssid) lv_textarea_set_text(s_swipe_ssid, ssid);
+    if (s_swipe_pass && pass) lv_textarea_set_text(s_swipe_pass, pass);
 }

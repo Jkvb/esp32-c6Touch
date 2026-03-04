@@ -586,3 +586,10 @@ idf.py -p COM6 flash monitor
 ```
 
 Si `idf.py --version` falla, vuelve a ejecutar `C:\esp\esp-idf\export.ps1` en la misma ventana.
+
+
+## UI extra: pantalla WiFi por swipe
+
+
+- Nueva pantalla completa de WiFi por swipe (izquierda), independiente del drawer.
+- Permite abrir configuración rápida sin entrar al menú de apps.
