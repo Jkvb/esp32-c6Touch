@@ -33,7 +33,6 @@ static uint8_t s_active_tile = 0;
 static uint8_t s_last_rot_quadrant = 0;
 static uint8_t s_rot_candidate = 0;
 static uint8_t s_rot_stable_count = 0;
-static bool s_swipe_handled = false;
 static lv_point_t s_press_start = {0, 0};
 
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
@@ -60,14 +59,13 @@ static void go_to_tile(uint8_t next, const char *reason)
 {
     if (next > 4) next = 4;
     if (next == s_active_tile) return;
-    lv_tileview_set_tile_by_index(s_tileview, next, 0, LV_ANIM_ON);
+    lv_tileview_set_tile_by_index(s_tileview, next, 0, LV_ANIM_OFF);
     ESP_LOGI(TAG_UI, "Pantalla activa=%d (%s)", next + 1, reason);
 }
 
 static void tile_press_cb(lv_event_t *e)
 {
     (void)e;
-    s_swipe_handled = false;
 
     lv_indev_t *indev = lv_indev_active();
     if (indev) {
@@ -81,7 +79,11 @@ static void tile_press_cb(lv_event_t *e)
 static void tile_pressing_cb(lv_event_t *e)
 {
     (void)e;
-    if (s_swipe_handled) return;
+}
+
+static void tile_release_cb(lv_event_t *e)
+{
+    (void)e;
 
     lv_indev_t *indev = lv_indev_active();
     if (!indev) return;
@@ -94,23 +96,15 @@ static void tile_pressing_cb(lv_event_t *e)
     int16_t adx = dx >= 0 ? dx : -dx;
     int16_t ady = dy >= 0 ? dy : -dy;
 
-    if (adx < 22 || adx < (ady + 8)) {
+    if (adx < 20 || adx < (ady + 6)) {
         return;
     }
 
     if (dx < 0 && s_active_tile < 4) {
-        go_to_tile((uint8_t)(s_active_tile + 1), "swipe drag");
-        s_swipe_handled = true;
+        go_to_tile((uint8_t)(s_active_tile + 1), "swipe snap");
     } else if (dx > 0 && s_active_tile > 0) {
-        go_to_tile((uint8_t)(s_active_tile - 1), "swipe drag");
-        s_swipe_handled = true;
+        go_to_tile((uint8_t)(s_active_tile - 1), "swipe snap");
     }
-}
-
-static void tile_release_cb(lv_event_t *e)
-{
-    (void)e;
-    s_swipe_handled = false;
 }
 
 static void tile_gesture_cb(lv_event_t *e)
@@ -140,7 +134,7 @@ static uint8_t accel_to_quadrant(int16_t ax, int16_t ay, bool valid)
     }
 
     if (abs_y >= abs_x) {
-        return (ay >= 0) ? 0 : 2;
+        return (ay >= 0) ? 2 : 0;
     }
     return (ax >= 0) ? 3 : 1;
 }
@@ -251,6 +245,8 @@ void ui_clock_create(void)
     lv_obj_add_event_cb(s_tileview, tile_press_cb, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(s_tileview, tile_pressing_cb, LV_EVENT_PRESSING, NULL);
     lv_obj_add_event_cb(s_tileview, tile_release_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_set_scroll_snap_x(s_tileview, LV_SCROLL_SNAP_CENTER);
+    lv_obj_set_scrollbar_mode(s_tileview, LV_SCROLLBAR_MODE_OFF);
 
     for (uint8_t i = 0; i < 5; i++) {
         s_tiles[i] = lv_tileview_add_tile(s_tileview, i, 0, LV_DIR_HOR);
