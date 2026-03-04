@@ -515,11 +515,11 @@ Si el touch no responde, en monitor debes ver trazas como:
 - `UI_CLOCK: Tap app WiFi`
 - `UI_CLOCK: Focus en input WiFi`
 - `UI_CLOCK: Guardar WiFi desde UI (ssid_len=... pass_len=...)`
-- `DISP: Touch CST816 detectado en 0x15 (SDA=20,SCL=21)`
+- `DISP: Touch detectado en 0x.. (SDA=20,SCL=21)`
 - `DISP: Touch LVGL input registrado`
 - `DISP: Touch activo x=... y=...`
 
-Si no aparece ninguna, revisa cableado/driver touch y que no haya conflicto en I2C.
+Si no aparece ninguna, revisa cableado/driver touch, dirección I2C del panel y que no haya conflicto en I2C.
 
 
 ## Fix rápido: `idf.py` no reconocido en PowerShell

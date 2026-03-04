@@ -56,6 +56,7 @@ static uint16_t s_touch_x = 0;
 static uint16_t s_touch_y = 0;
 static bool s_touch_ready = false;
 static uint32_t s_touch_reads = 0;
+static uint8_t s_touch_addr = TOUCH_CST816_ADDR;
 
 static esp_timer_handle_t s_lv_tick_timer;
 
@@ -84,26 +85,35 @@ static esp_err_t touch_cst816_init(void)
 
     esp_err_t err = i2c_param_config(TOUCH_I2C_PORT, &cfg);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Touch: i2c_param_config fallo: %s", esp_err_to_name(err));
-        return err;
+        ESP_LOGW(TAG, "Touch: i2c_param_config retorno %s; intentando reutilizar bus", esp_err_to_name(err));
     }
 
-    err = i2c_driver_install(TOUCH_I2C_PORT, cfg.mode, 0, 0, 0);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        ESP_LOGW(TAG, "Touch: i2c_driver_install fallo: %s", esp_err_to_name(err));
-        return err;
+    esp_err_t install_err = i2c_driver_install(TOUCH_I2C_PORT, cfg.mode, 0, 0, 0);
+    if (install_err == ESP_ERR_INVALID_STATE) {
+        ESP_LOGI(TAG, "Touch: I2C ya inicializado en puerto %d, reutilizando", (int)TOUCH_I2C_PORT);
+    } else if (install_err != ESP_OK) {
+        ESP_LOGW(TAG, "Touch: i2c_driver_install fallo: %s", esp_err_to_name(install_err));
+        return install_err;
     }
 
-    err = touch_i2c_ping(TOUCH_CST816_ADDR);
+    const uint8_t addrs[] = {0x15, 0x14, 0x38, 0x5D};
+    err = ESP_FAIL;
+    for (size_t i = 0; i < sizeof(addrs); i++) {
+        if (touch_i2c_ping(addrs[i]) == ESP_OK) {
+            s_touch_addr = addrs[i];
+            err = ESP_OK;
+            break;
+        }
+    }
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Touch CST816 no detectado en 0x%02X (SDA=%d,SCL=%d): %s",
-                 TOUCH_CST816_ADDR, TOUCH_I2C_SDA, TOUCH_I2C_SCL, esp_err_to_name(err));
+        ESP_LOGW(TAG, "Touch no detectado en addrs 0x15/0x14/0x38/0x5D (SDA=%d,SCL=%d)",
+                 TOUCH_I2C_SDA, TOUCH_I2C_SCL);
         return err;
     }
 
     s_touch_ready = true;
-    ESP_LOGI(TAG, "Touch CST816 detectado en 0x%02X (SDA=%d,SCL=%d)",
-             TOUCH_CST816_ADDR, TOUCH_I2C_SDA, TOUCH_I2C_SCL);
+    ESP_LOGI(TAG, "Touch detectado en 0x%02X (SDA=%d,SCL=%d)",
+             s_touch_addr, TOUCH_I2C_SDA, TOUCH_I2C_SCL);
     return ESP_OK;
 }
 
@@ -112,7 +122,7 @@ static bool touch_cst816_read_point(uint16_t *x, uint16_t *y, bool *pressed)
     uint8_t reg = 0x02;
     uint8_t data[6] = {0};
     esp_err_t err = i2c_master_write_read_device(TOUCH_I2C_PORT,
-                                                  TOUCH_CST816_ADDR,
+                                                  s_touch_addr,
                                                   &reg,
                                                   1,
                                                   data,
