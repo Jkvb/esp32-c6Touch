@@ -522,17 +522,17 @@ Si el touch no responde, en monitor debes ver trazas como:
 - `DISP: Touch UP x=... y=...`
 - `DISP: Touch read fallo (addr=0x..), err_count=...`
 - `DISP: Touch I2C scan SDA=18 SCL=8 -> ...`
-- `ACCEL: Sin respuesta I2C en SDA=.. SCL=..; iniciando auto-detección de pines`
-- `ACCEL: Auto-detección I2C exitosa en SDA=.. SCL=..`
 - `DISP: Touch init en bus compartido SDA=.. SCL=..`
 - `DISP: Touch raw p=.. bytes=.. .. .. .. .. .. ..`
 - `DISP: Touch activo x=... y=...`
 
 Si no aparece ninguna, revisa cableado/driver touch, dirección I2C del panel y que no haya conflicto en I2C.
 
-Si el log sigue en `sin dispositivos` sobre GPIO18/GPIO8, revisa alimentación del touch o pull-ups físicos del bus I2C.
+Si el log sigue en `sin dispositivos` sobre GPIO18/GPIO8, revisa alimentación del touch/IMU o pull-ups físicos del bus I2C.
 
 Para acelerómetro, ahora también verás:
+- `ACCEL: QMI8658 detectado addr=0x.. WHO_AM_I=0x..`
+- `ACCEL: QMI8658 listo (accel-only)`
 - `IAWICHU: Acelerómetro activo en I2C ... (init temprano).`
 - `IAWICHU: Accel init temprano fallo: ...`
 - `IAWICHU: Lectura accel fallo (...), count=...`
