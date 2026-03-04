@@ -620,3 +620,4 @@ Además, el reloj ahora cambia color dinámicamente para confirmar que el pipeli
 - Hora en **verde dinámico** (efecto tipo matriz).
 - `wichIA` se muestra en una etiqueta separada y **más pequeña**.
 - El acelerómetro desplaza sutilmente la hora y ajusta el brillo verde del fondo.
+- Maqueta de navegación por acelerómetro: inclinando fuerte izquierda/derecha cambia entre pantallas y muestra `UI #1/#2/#3`.

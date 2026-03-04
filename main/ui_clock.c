@@ -17,6 +17,7 @@ static const char *TAG_UI = "UI_CLOCK";
 
 static lv_obj_t *s_brand_lbl = NULL;
 static lv_obj_t *s_time_lbl = NULL;
+static lv_obj_t *s_mock_lbl = NULL;
 static volatile int16_t s_ax = 0;
 static volatile int16_t s_ay = 0;
 static volatile bool s_accel_valid = false;
@@ -42,6 +43,15 @@ static lv_obj_t *s_kb = NULL;
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
 
+
+static void hide_all_overlays(void);
+static void show_home_page(void);
+static void show_drawer(void);
+static void show_swipe_wifi_page(void);
+
+static uint8_t s_mock_screen = 1;
+static uint8_t s_tilt_cooldown = 0;
+
 static int16_t clamp16(int32_t v, int16_t min, int16_t max)
 {
     if (v < min) return min;
@@ -56,6 +66,32 @@ static void style_btn_matrix(lv_obj_t *btn)
     lv_obj_set_style_border_width(btn, 1, 0);
     lv_obj_set_style_shadow_width(btn, 0, 0);
     lv_obj_set_style_text_color(btn, lv_color_hex(0x00ff66), 0);
+}
+
+
+static int16_t abs16(int16_t v)
+{
+    return (v < 0) ? (int16_t)(-v) : v;
+}
+
+static void apply_mock_screen(uint8_t idx)
+{
+    s_mock_screen = idx;
+    if (idx == 1) {
+        hide_all_overlays();
+    } else if (idx == 2) {
+        show_drawer();
+        show_home_page();
+    } else {
+        show_swipe_wifi_page();
+    }
+
+    if (s_mock_lbl) {
+        char buf[40];
+        snprintf(buf, sizeof(buf), "UI #%u", (unsigned)s_mock_screen);
+        lv_label_set_text(s_mock_lbl, buf);
+    }
+    ESP_LOGI(TAG_UI, "Mock screen activa=%u por acelerometro", (unsigned)s_mock_screen);
 }
 
 static void hide_all_overlays(void)
@@ -113,6 +149,7 @@ static void clock_timer_cb(lv_timer_t *t)
         snprintf(buf, sizeof(buf), "%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
     }
     lv_label_set_text(s_time_lbl, buf);
+    if (s_tilt_cooldown > 0) s_tilt_cooldown--;
 
     uint8_t sec = (uint8_t)ti.tm_sec;
     uint8_t green = (uint8_t)(140 + (sec * 2) % 110);
@@ -122,6 +159,17 @@ static void clock_timer_cb(lv_timer_t *t)
     lv_obj_set_style_text_color(s_brand_lbl, lv_color_make(20, (uint8_t)(green - 40), 20), 0);
 
     if (s_accel_valid) {
+        if (s_tilt_cooldown == 0 && abs16(s_ax) > 1400) {
+            uint8_t next = s_mock_screen;
+            if (s_ax > 0) {
+                next = (uint8_t)((s_mock_screen % 3) + 1);
+            } else {
+                next = (uint8_t)((s_mock_screen == 1) ? 3 : (s_mock_screen - 1));
+            }
+            apply_mock_screen(next);
+            s_tilt_cooldown = 5;
+        }
+
         int16_t xoff = clamp16((int32_t)s_ax / 450, -45, 45);
         int16_t yoff = clamp16((int32_t)(-s_ay) / 450, -45, 45);
         lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, xoff, yoff + 6);
@@ -274,7 +322,14 @@ void ui_clock_create(void)
     lv_obj_set_style_text_font(s_time_lbl, CLOCK_FONT, 0);
     lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x00ff66), 0);
     lv_obj_set_style_text_align(s_time_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_pad_left(s_time_lbl, 2, 0);
+    lv_obj_set_style_pad_right(s_time_lbl, 2, 0);
     lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
+
+    s_mock_lbl = lv_label_create(scr);
+    lv_label_set_text(s_mock_lbl, "UI #1");
+    lv_obj_set_style_text_color(s_mock_lbl, lv_color_hex(0x00aa33), 0);
+    lv_obj_align(s_mock_lbl, LV_ALIGN_BOTTOM_LEFT, 4, -4);
 
     lv_obj_t *btn_open = lv_button_create(scr);
     lv_obj_set_size(btn_open, 36, 36);
@@ -480,8 +535,7 @@ void ui_clock_create(void)
     lv_obj_align(s_kb, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_obj_add_event_cb(s_kb, kb_event_cb, LV_EVENT_ALL, NULL);
 
-    hide_all_overlays();
-    show_home_page();
+    apply_mock_screen(1);
 
     lv_timer_create(clock_timer_cb, 200, NULL);
 }

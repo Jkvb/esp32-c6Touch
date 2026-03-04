@@ -320,6 +320,7 @@ static void ui_wifi_save_handler(const char *ssid, const char *pass)
 void app_main(void)
 {
     ESP_LOGI(TAG, "Boot. DISPLAY + reloj + acelerómetro + WiFi SNTP.");
+    ESP_LOGI(TAG, "Puertos QMI8658: I2C0 SDA=GPIO20 SCL=GPIO21, addr=0x6A/0x6B");
 
     wifi_fill_runtime_from_config();
 
