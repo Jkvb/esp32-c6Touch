@@ -361,6 +361,16 @@ void app_main(void)
     ui_clock_set_wifi_scan_callback(ui_wifi_scan_handler);
     ui_clock_prefill_wifi(s_wifi_ssid, s_wifi_pass);
 
+    if (accel_ok) {
+        int16_t x = 0, y = 0, z = 0;
+        esp_err_t probe = accel_qmi8658_read_xyz(&x, &y, &z);
+        if (probe == ESP_OK) {
+            ESP_LOGI(TAG, "Probe accel post-display OK x=%d y=%d z=%d", (int)x, (int)y, (int)z);
+        } else {
+            ESP_LOGW(TAG, "Probe accel post-display fallo: %s", esp_err_to_name(probe));
+        }
+    }
+
     if (wifi_connect_blocking() == ESP_OK) {
         ui_wifi_scan_handler();
         start_sntp_sync();

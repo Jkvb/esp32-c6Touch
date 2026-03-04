@@ -525,6 +525,7 @@ Para acelerómetro, ahora también verás:
 - `IAWICHU: Acelerómetro activo en I2C ... (init temprano).`
 - `IAWICHU: Accel init temprano fallo: ...`
 - `IAWICHU: Lectura accel fallo (...), count=...`
+- `IAWICHU: Probe accel post-display OK x=... y=... z=...`
 
 
 ## Fix rápido: `idf.py` no reconocido en PowerShell

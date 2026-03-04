@@ -83,21 +83,22 @@ static esp_err_t touch_cst816_init(void)
         .clk_flags = 0,
     };
 
-    esp_err_t err = i2c_param_config(TOUCH_I2C_PORT, &cfg);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Touch: i2c_param_config retorno %s; intentando reutilizar bus", esp_err_to_name(err));
-    }
-
     esp_err_t install_err = i2c_driver_install(TOUCH_I2C_PORT, cfg.mode, 0, 0, 0);
     if (install_err == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "Touch: I2C ya inicializado en puerto %d, reutilizando", (int)TOUCH_I2C_PORT);
-    } else if (install_err != ESP_OK) {
+        ESP_LOGI(TAG, "Touch: I2C ya inicializado en puerto %d, se conserva config actual", (int)TOUCH_I2C_PORT);
+    } else if (install_err == ESP_OK) {
+        esp_err_t err = i2c_param_config(TOUCH_I2C_PORT, &cfg);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Touch: i2c_param_config fallo: %s", esp_err_to_name(err));
+            return err;
+        }
+    } else {
         ESP_LOGW(TAG, "Touch: i2c_driver_install fallo: %s", esp_err_to_name(install_err));
         return install_err;
     }
 
     const uint8_t addrs[] = {0x15, 0x14, 0x38, 0x5D};
-    err = ESP_FAIL;
+    esp_err_t err = ESP_FAIL;
     for (size_t i = 0; i < sizeof(addrs); i++) {
         if (touch_i2c_ping(addrs[i]) == ESP_OK) {
             s_touch_addr = addrs[i];

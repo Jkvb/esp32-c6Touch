@@ -74,15 +74,16 @@ esp_err_t accel_qmi8658_init(void)
         .clk_flags = 0,
     };
 
-    esp_err_t err = i2c_param_config(I2C_PORT_NUM, &cfg);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "i2c_param_config retorno %s; intentando reutilizar bus", esp_err_to_name(err));
-    }
-
     esp_err_t install_err = i2c_driver_install(I2C_PORT_NUM, cfg.mode, 0, 0, 0);
     if (install_err == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "I2C ya inicializado en puerto %d, reutilizando", (int)I2C_PORT_NUM);
-    } else if (install_err != ESP_OK) {
+        ESP_LOGI(TAG, "I2C ya inicializado en puerto %d, reutilizando config actual", (int)I2C_PORT_NUM);
+    } else if (install_err == ESP_OK) {
+        esp_err_t err = i2c_param_config(I2C_PORT_NUM, &cfg);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "i2c_param_config accel fallo: %s", esp_err_to_name(err));
+            return err;
+        }
+    } else {
         ESP_LOGE(TAG, "No se pudo inicializar I2C para accel: %s", esp_err_to_name(install_err));
         return install_err;
     }
@@ -108,7 +109,7 @@ esp_err_t accel_qmi8658_init(void)
         return ESP_ERR_NOT_FOUND;
     }
 
-    err = accel_write_reg(REG_CTRL1, 0x40); // auto increment
+    esp_err_t err = accel_write_reg(REG_CTRL1, 0x40); // auto increment
     if (err != ESP_OK) return err;
 
     err = accel_write_reg(REG_CTRL2, 0x15); // ACC +/-4g, ODR 128Hz
