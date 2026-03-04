@@ -32,8 +32,8 @@ static const char *TAG = "DISP";
 #define LCD_X_GAP        35
 #define LCD_Y_GAP        0
 
-/* Si sigue negro, prueba cambiar esto a 0 (backlight activo-bajo) */
-#define LCD_BL_ACTIVE_HIGH   0
+/* Waveshare 1.9" suele usar BL activo-alto (GPIO15=1 enciende). */
+#define LCD_BL_ACTIVE_HIGH   1
 /* Si ves colores raros o pantalla en negro pero BL sÃ­ enciende, prueba:
    - LCD_INVERT_COLOR 1
    - LCD_MIRROR_Y 1

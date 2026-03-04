@@ -3,6 +3,7 @@ idf_component_register(
         "main.c"
         "display_st7789_lvgl.c"
         "ui_clock.c"
+        "accel_qmi8658.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES
         nvs_flash
@@ -10,4 +11,8 @@ idf_component_register(
         esp_lcd
         driver
         lvgl
+        lwip
+        esp_wifi
+        esp_netif
+        esp_event
 )
