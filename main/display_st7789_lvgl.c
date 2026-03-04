@@ -33,7 +33,7 @@ static const char *TAG = "DISP";
 #define LCD_Y_GAP        0
 
 /* Si el BL parpadea o no se queda prendido, cambia a 0 (activo-bajo) */
-#define LCD_BL_ACTIVE_HIGH   1
+#define LCD_BL_ACTIVE_HIGH   0
 
 #define LCD_INVERT_COLOR  0
 
