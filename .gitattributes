@@ -1,0 +1,9 @@
+﻿# Fuerza finales LF para que no se rompa el build por CRLF raro
+*.c     text eol=lf
+*.h     text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+*.yml   text eol=lf
+*.csv   text eol=lf
+*.md    text eol=lf
+*.py    text eol=lf

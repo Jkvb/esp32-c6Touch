@@ -1,0 +1,40 @@
+﻿# ==== ESP-IDF / CMake (generado) ====
+/build/
+/sdkconfig
+/sdkconfig.old
+/sdkconfig.*.old
+/compile_commands.json
+/CMakeCache.txt
+/CMakeFiles/
+/cmake-build-*/
+/idf-build-*/
+/install/
+/_testing/
+/debug/
+/dist/
+/bin/
+
+# ==== ESP-IDF Component Manager (generado) ====
+/managed_components/
+/dependencies.lock.tmp
+
+# ==== Local overrides (no subir secretos) ====
+/sdkconfig.defaults.local
+/sdkconfig.secrets
+*.secrets.*
+
+# ==== Logs / temporales ====
+*.log
+*.tmp
+*.bak
+*.swp
+.DS_Store
+
+# ==== IDEs ====
+.vscode/
+.idea/
+*.code-workspace
+
+# ==== Python ====
+__pycache__/
+*.pyc

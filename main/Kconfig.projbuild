@@ -1,0 +1,23 @@
+menu "IAWICHU Clock"
+
+config IAWICHU_WIFI_SSID
+    string "WiFi SSID"
+    default ""
+
+config IAWICHU_WIFI_PASS
+    string "WiFi Password"
+    default ""
+
+config IAWICHU_NTP_SERVER
+    string "NTP server"
+    default "pool.ntp.org"
+
+config IAWICHU_TZ
+    string "Timezone TZ string"
+    default "CST6"
+
+config IAWICHU_BLE_NAME
+    string "BLE device name"
+    default "iawichu"
+
+endmenu
