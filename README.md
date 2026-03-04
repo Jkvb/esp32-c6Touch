@@ -517,3 +517,26 @@ Si el touch no responde, en monitor debes ver trazas como:
 - `UI_CLOCK: Guardar WiFi desde UI (ssid_len=... pass_len=...)`
 
 Si no aparece ninguna, revisa driver/calibración touch del display.
+
+
+## Fix rápido: `idf.py` no reconocido en PowerShell
+
+Si te sale `idf.py : The term 'idf.py' is not recognized...`, tu sesión perdió el entorno ESP-IDF.
+
+Ejecuta en **esa misma** ventana de PowerShell:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+C:\esp\esp-idf\export.ps1
+idf.py --version
+idf.py -p COM6 flash monitor
+```
+
+Si cerraste la terminal o restauraste historial, debes repetir `export.ps1` antes de usar `idf.py`.
+
+### Push correcto (evitar typo `git pu;;`)
+
+```powershell
+git status --short
+git push origin main
+```
