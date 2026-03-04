@@ -540,3 +540,17 @@ Si cerraste la terminal o restauraste historial, debes repetir `export.ps1` ante
 git status --short
 git push origin main
 ```
+
+
+## Script anti-error: `idf.py` no reconocido
+
+Si PowerShell te marca `idf.py` como comando no reconocido, usa este script (siempre re-exporta entorno):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\flash_monitor.ps1 -Port COM6
+```
+
+Este script hace:
+1. Ejecuta `C:\esp\esp-idf\export.ps1`
+2. Verifica `idf.py --version`
+3. Ejecuta `idf.py -p COM6 flash monitor`
