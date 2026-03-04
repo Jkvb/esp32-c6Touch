@@ -43,6 +43,28 @@ For more information on structure and contents of ESP-IDF projects, please refer
     * Hardware connection is not correct: run `idf.py -p PORT monitor`, and reboot your board to see if there are any output logs.
     * The baud rate for downloading is too high: lower your baud rate in the `menuconfig` menu, and try again.
 
+* `idf.py` not recognized (Windows / PowerShell)
+
+    * `idf.py` is only available after ESP-IDF tools are installed and the ESP-IDF environment is loaded in your current shell.
+    * Open **ESP-IDF PowerShell** from the Start menu, or initialize an existing PowerShell session manually:
+
+      ```powershell
+      cd <path-to-esp-idf>
+      .\export.ps1
+      ```
+
+    * Verify setup before flashing:
+
+      ```powershell
+      idf.py --version
+      ```
+
+    * Then return to this project and run:
+
+      ```powershell
+      idf.py -p COM6 flash monitor
+      ```
+
 ## Technical support and feedback
 
 Please use the following feedback channels:
