@@ -36,6 +36,10 @@ static uint8_t s_rot_stable_count = 0;
 static lv_point_t s_press_start = {0, 0};
 static bool s_swipe_consumed = false;
 
+static const int16_t SWIPE_DRAG_MIN_X = 16;
+static const int16_t SWIPE_RELEASE_MIN_X = 12;
+static const int16_t SWIPE_HORIZ_MARGIN = 4;
+
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
 
@@ -97,17 +101,17 @@ static void tile_pressing_cb(lv_event_t *e)
     int16_t adx = dx >= 0 ? dx : -dx;
     int16_t ady = dy >= 0 ? dy : -dy;
 
-    if (adx < 16 || adx < (ady + 4)) {
+    if (adx < SWIPE_DRAG_MIN_X || adx < (ady + SWIPE_HORIZ_MARGIN)) {
         return;
     }
 
     if (dx < 0 && s_active_tile < 4) {
         go_to_tile((uint8_t)(s_active_tile + 1), "swipe drag");
-        ESP_LOGI(TAG_UI, "Swipe drag aceptado -> sig pantalla (dx=%d)", (int)dx);
+        ESP_LOGI(TAG_UI, "Swipe drag aceptado -> sig pantalla dx=%d dy=%d |adx|=%d |ady|=%d", (int)dx, (int)dy, (int)adx, (int)ady);
         s_swipe_consumed = true;
     } else if (dx > 0 && s_active_tile > 0) {
         go_to_tile((uint8_t)(s_active_tile - 1), "swipe drag");
-        ESP_LOGI(TAG_UI, "Swipe drag aceptado -> pantalla ant (dx=%d)", (int)dx);
+        ESP_LOGI(TAG_UI, "Swipe drag aceptado -> pantalla ant dx=%d dy=%d |adx|=%d |ady|=%d", (int)dx, (int)dy, (int)adx, (int)ady);
         s_swipe_consumed = true;
     }
 }
@@ -129,17 +133,17 @@ static void tile_release_cb(lv_event_t *e)
 
     ESP_LOGI(TAG_UI, "Swipe release dx=%d dy=%d |adx|=%d |ady|=%d consumed=%d", (int)dx, (int)dy, (int)adx, (int)ady, (int)s_swipe_consumed);
 
-    if (s_swipe_consumed || adx < 12 || adx < (ady + 4)) {
+    if (s_swipe_consumed || adx < SWIPE_RELEASE_MIN_X || adx < (ady + SWIPE_HORIZ_MARGIN)) {
         s_swipe_consumed = false;
         return;
     }
 
     if (dx < 0 && s_active_tile < 4) {
         go_to_tile((uint8_t)(s_active_tile + 1), "swipe snap");
-        ESP_LOGI(TAG_UI, "Swipe release aceptado -> sig pantalla (dx=%d)", (int)dx);
+        ESP_LOGI(TAG_UI, "Swipe release aceptado -> sig pantalla dx=%d dy=%d |adx|=%d |ady|=%d", (int)dx, (int)dy, (int)adx, (int)ady);
     } else if (dx > 0 && s_active_tile > 0) {
         go_to_tile((uint8_t)(s_active_tile - 1), "swipe snap");
-        ESP_LOGI(TAG_UI, "Swipe release aceptado -> pantalla ant (dx=%d)", (int)dx);
+        ESP_LOGI(TAG_UI, "Swipe release aceptado -> pantalla ant dx=%d dy=%d |adx|=%d |ady|=%d", (int)dx, (int)dy, (int)adx, (int)ady);
     }
 
     s_swipe_consumed = false;
@@ -272,6 +276,7 @@ void ui_clock_create(void)
 {
     lv_obj_t *scr = lv_screen_active();
     ESP_LOGI(TAG_UI, "ui_clock_create init (modo 5 pantallas)");
+    ESP_LOGI(TAG_UI, "Swipe cfg drag_min=%d release_min=%d horiz_margin=%d", (int)SWIPE_DRAG_MIN_X, (int)SWIPE_RELEASE_MIN_X, (int)SWIPE_HORIZ_MARGIN);
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
