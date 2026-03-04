@@ -36,8 +36,8 @@ static uint8_t s_rot_stable_count = 0;
 static lv_point_t s_press_start = {0, 0};
 static bool s_swipe_consumed = false;
 
-static const int16_t SWIPE_DRAG_MIN_X = 10;
-static const int16_t SWIPE_RELEASE_MIN_X = 6;
+static const int16_t SWIPE_DRAG_MIN_X = 50;
+static const int16_t SWIPE_RELEASE_MIN_X = 50;
 /* Permite swipe diagonal leve (no exigir que X gane por mucho a Y). */
 static const int16_t SWIPE_VERTICAL_REJECT_GAP = 12;
 
@@ -75,7 +75,7 @@ static void go_to_tile(uint8_t next, const char *reason)
 {
     if (next > 4) next = 4;
     if (next == s_active_tile) return;
-    lv_tileview_set_tile_by_index(s_tileview, next, 0, LV_ANIM_OFF);
+    lv_tileview_set_tile_by_index(s_tileview, next, 0, LV_ANIM_ON);
     ESP_LOGI(TAG_UI, "Pantalla activa=%d (%s)", next + 1, reason);
 }
 
