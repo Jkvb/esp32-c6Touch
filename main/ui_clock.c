@@ -36,7 +36,7 @@ static uint8_t s_rot_stable_count = 0;
 static lv_point_t s_press_start = {0, 0};
 static bool s_swipe_consumed = false;
 
-static const int16_t SWIPE_NAV_DELTA_PX = 50;
+static const int16_t SWIPE_NAV_DELTA_PX = 20;
 
 
 #define UI_TOUCH_DEBUG_OVERLAY 1
