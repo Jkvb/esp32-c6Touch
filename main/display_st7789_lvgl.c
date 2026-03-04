@@ -10,6 +10,7 @@
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "driver/i2c.h"
+#include "accel_qmi8658.h"
 
 static const char *TAG = "DISP";
 
@@ -46,8 +47,8 @@ static const char *TAG = "DISP";
 #define LCD_SWAP_XY       0
 
 #define TOUCH_I2C_PORT      I2C_NUM_0
-#define TOUCH_I2C_SDA       20
-#define TOUCH_I2C_SCL       21
+#define TOUCH_I2C_SDA_DEFAULT 20
+#define TOUCH_I2C_SCL_DEFAULT 21
 #define TOUCH_I2C_FREQ_HZ   400000
 #define TOUCH_CST816_ADDR   0x15
 
@@ -59,6 +60,8 @@ static uint32_t s_touch_reads = 0;
 static uint8_t s_touch_addr = TOUCH_CST816_ADDR;
 static uint32_t s_touch_read_errors = 0;
 static uint32_t s_touch_raw_logs = 0;
+static int s_touch_i2c_sda = TOUCH_I2C_SDA_DEFAULT;
+static int s_touch_i2c_scl = TOUCH_I2C_SCL_DEFAULT;
 
 static esp_err_t touch_i2c_ping(uint8_t addr);
 
@@ -76,10 +79,10 @@ static void touch_i2c_scan_log(void)
     }
     if (count > 0) {
         ESP_LOGI(TAG, "Touch I2C scan SDA=%d SCL=%d -> %d dev(s): %s",
-                 TOUCH_I2C_SDA, TOUCH_I2C_SCL, count, found);
+                 s_touch_i2c_sda, s_touch_i2c_scl, count, found);
     } else {
         ESP_LOGW(TAG, "Touch I2C scan SDA=%d SCL=%d -> sin dispositivos",
-                 TOUCH_I2C_SDA, TOUCH_I2C_SCL);
+                 s_touch_i2c_sda, s_touch_i2c_scl);
     }
 }
 
@@ -98,11 +101,19 @@ static esp_err_t touch_i2c_ping(uint8_t addr)
 
 static esp_err_t touch_cst816_init(void)
 {
+    int accel_sda = TOUCH_I2C_SDA_DEFAULT;
+    int accel_scl = TOUCH_I2C_SCL_DEFAULT;
+    accel_qmi8658_get_i2c_pins(&accel_sda, &accel_scl);
+    s_touch_i2c_sda = accel_sda;
+    s_touch_i2c_scl = accel_scl;
+
+    ESP_LOGI(TAG, "Touch init usando I2C SDA=%d SCL=%d", s_touch_i2c_sda, s_touch_i2c_scl);
+
     i2c_config_t cfg = {
         .mode = I2C_MODE_MASTER,
-        .sda_io_num = TOUCH_I2C_SDA,
+        .sda_io_num = s_touch_i2c_sda,
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_io_num = TOUCH_I2C_SCL,
+        .scl_io_num = s_touch_i2c_scl,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
         .master.clk_speed = TOUCH_I2C_FREQ_HZ,
         .clk_flags = 0,
@@ -138,13 +149,13 @@ static esp_err_t touch_cst816_init(void)
     }
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Touch no detectado en addrs 0x15/0x14/0x38/0x5D (SDA=%d,SCL=%d)",
-                 TOUCH_I2C_SDA, TOUCH_I2C_SCL);
+                 s_touch_i2c_sda, s_touch_i2c_scl);
         return err;
     }
 
     s_touch_ready = true;
     ESP_LOGI(TAG, "Touch detectado en 0x%02X (SDA=%d,SCL=%d)",
-             s_touch_addr, TOUCH_I2C_SDA, TOUCH_I2C_SCL);
+             s_touch_addr, s_touch_i2c_sda, s_touch_i2c_scl);
     return ESP_OK;
 }
 

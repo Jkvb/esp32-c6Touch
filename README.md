@@ -522,6 +522,9 @@ Si el touch no responde, en monitor debes ver trazas como:
 - `DISP: Touch UP x=... y=...`
 - `DISP: Touch read fallo (addr=0x..), err_count=...`
 - `DISP: Touch I2C scan SDA=20 SCL=21 -> ...`
+- `ACCEL: Sin respuesta I2C en SDA=.. SCL=..; iniciando auto-detección de pines`
+- `ACCEL: Auto-detección I2C exitosa en SDA=.. SCL=..`
+- `DISP: Touch init usando I2C SDA=.. SCL=..`
 - `DISP: Touch raw p=.. bytes=.. .. .. .. .. .. ..`
 - `DISP: Touch activo x=... y=...`
 

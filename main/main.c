@@ -326,7 +326,7 @@ static void ui_wifi_save_handler(const char *ssid, const char *pass)
 void app_main(void)
 {
     ESP_LOGI(TAG, "Boot. DISPLAY + reloj + acelerómetro + WiFi SNTP.");
-    ESP_LOGI(TAG, "Puertos QMI8658: I2C0 SDA=GPIO20 SCL=GPIO21, addr=0x6A/0x6B");
+    ESP_LOGI(TAG, "Puertos QMI8658 por defecto: I2C0 SDA=GPIO20 SCL=GPIO21, addr=0x6A/0x6B");
 
     /* Inicializar accel primero para validar que el bus I2C base funciona
        antes de inicializar touch/LVGL sobre el mismo puerto I2C0. */
@@ -334,7 +334,9 @@ void app_main(void)
     esp_err_t acc_ret = accel_qmi8658_init();
     if (acc_ret == ESP_OK) {
         accel_ok = true;
-        ESP_LOGI(TAG, "Acelerómetro activo en I2C SDA=GPIO20 SCL=GPIO21 (init temprano).");
+        int accel_sda = 0, accel_scl = 0;
+        accel_qmi8658_get_i2c_pins(&accel_sda, &accel_scl);
+        ESP_LOGI(TAG, "Acelerómetro activo en I2C SDA=GPIO%d SCL=GPIO%d (init temprano).", accel_sda, accel_scl);
     } else {
         ESP_LOGW(TAG, "Accel init temprano fallo: %s", esp_err_to_name(acc_ret));
     }
@@ -385,7 +387,9 @@ void app_main(void)
     if (accel_ok) {
         xTaskCreate(accel_task, "accel_task", 4096, NULL, 4, NULL);
     } else {
-        ESP_LOGW(TAG, "Sin acelerómetro por ahora. Revisa puertos I2C: SDA=GPIO20 SCL=GPIO21.");
+        int accel_sda = 0, accel_scl = 0;
+        accel_qmi8658_get_i2c_pins(&accel_sda, &accel_scl);
+        ESP_LOGW(TAG, "Sin acelerómetro por ahora. Revisa puertos I2C actuales: SDA=GPIO%d SCL=GPIO%d.", accel_sda, accel_scl);
     }
 
     xTaskCreate(lvgl_task, "lvgl_task", 4096, NULL, 5, NULL);

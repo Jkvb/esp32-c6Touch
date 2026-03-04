@@ -4,8 +4,8 @@
 #include "esp_log.h"
 
 #define I2C_PORT_NUM            I2C_NUM_0
-#define I2C_SDA_GPIO            20
-#define I2C_SCL_GPIO            21
+#define I2C_DEFAULT_SDA_GPIO    20
+#define I2C_DEFAULT_SCL_GPIO    21
 #define I2C_FREQ_HZ             400000
 
 #define QMI8658_ADDR1           0x6A
@@ -20,6 +20,16 @@
 static const char *TAG = "ACCEL";
 static uint8_t s_addr = 0;
 static bool s_ready = false;
+static int s_i2c_sda = I2C_DEFAULT_SDA_GPIO;
+static int s_i2c_scl = I2C_DEFAULT_SCL_GPIO;
+
+static const int s_i2c_candidates[][2] = {
+    {20, 21},
+    {8, 9},
+    {18, 19},
+    {19, 20},
+    {6, 7},
+};
 
 static esp_err_t i2c_ping(uint8_t addr)
 {
@@ -30,6 +40,17 @@ static esp_err_t i2c_ping(uint8_t addr)
     esp_err_t err = i2c_master_cmd_begin(I2C_PORT_NUM, cmd, pdMS_TO_TICKS(40));
     i2c_cmd_link_delete(cmd);
     return err;
+}
+
+static bool i2c_any_known_device_present(void)
+{
+    const uint8_t addrs[] = {0x15, 0x14, 0x38, 0x5D, QMI8658_ADDR1, QMI8658_ADDR2};
+    for (size_t i = 0; i < sizeof(addrs); i++) {
+        if (i2c_ping(addrs[i]) == ESP_OK) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static void i2c_scan_log(void)
@@ -45,10 +66,79 @@ static void i2c_scan_log(void)
         }
     }
     if (count > 0) {
-        ESP_LOGI(TAG, "I2C scan SDA=%d SCL=%d -> %d dev(s): %s", I2C_SDA_GPIO, I2C_SCL_GPIO, count, found);
+        ESP_LOGI(TAG, "I2C scan SDA=%d SCL=%d -> %d dev(s): %s", s_i2c_sda, s_i2c_scl, count, found);
     } else {
-        ESP_LOGW(TAG, "I2C scan SDA=%d SCL=%d -> sin dispositivos", I2C_SDA_GPIO, I2C_SCL_GPIO);
+        ESP_LOGW(TAG, "I2C scan SDA=%d SCL=%d -> sin dispositivos", s_i2c_sda, s_i2c_scl);
     }
+}
+
+static esp_err_t i2c_reconfigure_bus(int sda_gpio, int scl_gpio)
+{
+    (void)i2c_driver_delete(I2C_PORT_NUM);
+
+    i2c_config_t cfg = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = sda_gpio,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_io_num = scl_gpio,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = I2C_FREQ_HZ,
+        .clk_flags = 0,
+    };
+
+    esp_err_t cfg_err = i2c_param_config(I2C_PORT_NUM, &cfg);
+    if (cfg_err != ESP_OK) {
+        ESP_LOGW(TAG, "i2c_param_config accel retorno %s en SDA=%d SCL=%d",
+                 esp_err_to_name(cfg_err), sda_gpio, scl_gpio);
+        return cfg_err;
+    }
+
+    esp_err_t install_err = i2c_driver_install(I2C_PORT_NUM, cfg.mode, 0, 0, 0);
+    if (install_err == ESP_OK) {
+        ESP_LOGI(TAG, "I2C accel instalado en puerto %d (SDA=%d SCL=%d)", (int)I2C_PORT_NUM, sda_gpio, scl_gpio);
+        s_i2c_sda = sda_gpio;
+        s_i2c_scl = scl_gpio;
+        return ESP_OK;
+    }
+
+    ESP_LOGW(TAG, "i2c_driver_install accel fallo en SDA=%d SCL=%d: %s",
+             sda_gpio, scl_gpio, esp_err_to_name(install_err));
+    return install_err;
+}
+
+static void i2c_try_autodetect_pins(void)
+{
+    if (i2c_any_known_device_present()) {
+        ESP_LOGI(TAG, "Bus I2C actual ya responde en SDA=%d SCL=%d", s_i2c_sda, s_i2c_scl);
+        return;
+    }
+
+    ESP_LOGW(TAG, "Sin respuesta I2C en SDA=%d SCL=%d; iniciando auto-detección de pines",
+             s_i2c_sda, s_i2c_scl);
+
+    for (size_t i = 0; i < (sizeof(s_i2c_candidates) / sizeof(s_i2c_candidates[0])); i++) {
+        int sda = s_i2c_candidates[i][0];
+        int scl = s_i2c_candidates[i][1];
+
+        if (sda == s_i2c_sda && scl == s_i2c_scl) {
+            continue;
+        }
+
+        if (i2c_reconfigure_bus(sda, scl) != ESP_OK) {
+            continue;
+        }
+
+        if (i2c_any_known_device_present()) {
+            ESP_LOGI(TAG, "Auto-detección I2C exitosa en SDA=%d SCL=%d", sda, scl);
+            return;
+        }
+
+        ESP_LOGW(TAG, "Sin respuesta en pines candidatos SDA=%d SCL=%d", sda, scl);
+    }
+
+    ESP_LOGW(TAG, "Auto-detección I2C sin éxito; se restauran pines por defecto SDA=%d SCL=%d",
+             I2C_DEFAULT_SDA_GPIO, I2C_DEFAULT_SCL_GPIO);
+    (void)i2c_reconfigure_bus(I2C_DEFAULT_SDA_GPIO, I2C_DEFAULT_SCL_GPIO);
 }
 
 static esp_err_t accel_write_reg(uint8_t reg, uint8_t value)
@@ -64,33 +154,16 @@ static esp_err_t accel_read_reg(uint8_t reg, uint8_t *value)
 
 esp_err_t accel_qmi8658_init(void)
 {
-    i2c_config_t cfg = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = I2C_SDA_GPIO,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_io_num = I2C_SCL_GPIO,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_FREQ_HZ,
-        .clk_flags = 0,
-    };
+    s_ready = false;
+    s_addr = 0;
 
-    esp_err_t cfg_err = i2c_param_config(I2C_PORT_NUM, &cfg);
-    if (cfg_err != ESP_OK) {
-        ESP_LOGW(TAG, "i2c_param_config accel retorno %s", esp_err_to_name(cfg_err));
+    esp_err_t init_err = i2c_reconfigure_bus(I2C_DEFAULT_SDA_GPIO, I2C_DEFAULT_SCL_GPIO);
+    if (init_err != ESP_OK) {
+        ESP_LOGE(TAG, "No se pudo inicializar I2C para accel: %s", esp_err_to_name(init_err));
+        return init_err;
     }
 
-    esp_err_t install_err = i2c_driver_install(I2C_PORT_NUM, cfg.mode, 0, 0, 0);
-    if (install_err == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "I2C ya inicializado en puerto %d, reutilizando config actual", (int)I2C_PORT_NUM);
-    } else if (install_err == ESP_FAIL) {
-        ESP_LOGW(TAG, "i2c_driver_install accel retorno ESP_FAIL; intentando operar con bus existente");
-    } else if (install_err == ESP_OK) {
-        ESP_LOGI(TAG, "I2C accel instalado en puerto %d", (int)I2C_PORT_NUM);
-    } else {
-        ESP_LOGE(TAG, "No se pudo inicializar I2C para accel: %s", esp_err_to_name(install_err));
-        return install_err;
-    }
-
+    i2c_try_autodetect_pins();
     i2c_scan_log();
 
     uint8_t who = 0;
@@ -108,7 +181,7 @@ esp_err_t accel_qmi8658_init(void)
         if (i2c_ping(0x15) == ESP_OK) {
             ESP_LOGW(TAG, "Detectado touch (0x15) en bus I2C, pero QMI8658 no responde.");
         }
-        ESP_LOGW(TAG, "No se detecto QMI8658 en I2C (SDA=%d, SCL=%d)", I2C_SDA_GPIO, I2C_SCL_GPIO);
+        ESP_LOGW(TAG, "No se detecto QMI8658 en I2C (SDA=%d, SCL=%d)", s_i2c_sda, s_i2c_scl);
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -146,4 +219,10 @@ esp_err_t accel_qmi8658_read_xyz(int16_t *x, int16_t *y, int16_t *z)
 bool accel_qmi8658_is_ready(void)
 {
     return s_ready;
+}
+
+void accel_qmi8658_get_i2c_pins(int *sda, int *scl)
+{
+    if (sda) *sda = s_i2c_sda;
+    if (scl) *scl = s_i2c_scl;
 }
