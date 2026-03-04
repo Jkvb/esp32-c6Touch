@@ -59,8 +59,10 @@ static void accel_task(void *arg)
             err_count = 0;
             ui_clock_set_accel(x, y, true);
         } else {
-            ui_clock_set_accel(0, 0, false);
             err_count++;
+            if (err_count >= 3U) {
+                ui_clock_set_accel(0, 0, false);
+            }
             if (err_count == 1 || (err_count % 20U) == 0U) {
                 ESP_LOGW(TAG, "Lectura accel fallo (%s), count=%lu", esp_err_to_name(err), (unsigned long)err_count);
             }

@@ -29,6 +29,11 @@ static volatile int16_t s_ax = 0;
 static volatile int16_t s_ay = 0;
 static volatile bool s_accel_valid = false;
 
+static uint8_t s_active_tile = 0;
+static uint8_t s_last_rot_quadrant = 0;
+static uint8_t s_rot_candidate = 0;
+static uint8_t s_rot_stable_count = 0;
+
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
 
@@ -39,16 +44,93 @@ static int16_t clamp16(int32_t v, int16_t min, int16_t max)
     return (int16_t)v;
 }
 
+static uint8_t tile_index_from_obj(lv_obj_t *obj)
+{
+    for (uint8_t i = 0; i < 5; i++) {
+        if (obj == s_tiles[i]) return i;
+    }
+    return 0;
+}
+
 static void tile_changed_cb(lv_event_t *e)
 {
     lv_obj_t *tv = lv_event_get_target(e);
     lv_obj_t *act = lv_tileview_get_tile_act(tv);
-    for (int i = 0; i < 5; i++) {
-        if (act == s_tiles[i]) {
-            ESP_LOGI(TAG_UI, "Pantalla activa=%d (touch swipe)", i + 1);
-            break;
-        }
+    s_active_tile = tile_index_from_obj(act);
+    ESP_LOGI(TAG_UI, "Pantalla activa=%d (touch swipe)", s_active_tile + 1);
+}
+
+static void tile_gesture_cb(lv_event_t *e)
+{
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev) return;
+
+    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+    uint8_t next = s_active_tile;
+
+    if (dir == LV_DIR_LEFT && s_active_tile < 4) {
+        next = s_active_tile + 1;
+    } else if (dir == LV_DIR_RIGHT && s_active_tile > 0) {
+        next = s_active_tile - 1;
+    } else {
+        return;
     }
+
+    lv_tileview_set_tile_by_index(s_tileview, next, 0, LV_ANIM_ON);
+    ESP_LOGI(TAG_UI, "Swipe gesture dir=%d -> pantalla=%d", (int)dir, next + 1);
+}
+
+static uint8_t accel_to_quadrant(int16_t ax, int16_t ay, bool valid)
+{
+    if (!valid) return s_last_rot_quadrant;
+
+    const int16_t TH = 4200; /* ~0.25g con 16384 LSB/g */
+    int32_t abs_x = ax >= 0 ? ax : -ax;
+    int32_t abs_y = ay >= 0 ? ay : -ay;
+
+    if (abs_x < TH && abs_y < TH) {
+        return s_last_rot_quadrant;
+    }
+
+    if (abs_y >= abs_x) {
+        return (ay >= 0) ? 0 : 2;
+    }
+    return (ax >= 0) ? 3 : 1;
+}
+
+static int16_t quadrant_to_deg10(uint8_t q)
+{
+    switch (q) {
+        case 1: return 900;
+        case 2: return 1800;
+        case 3: return 2700;
+        default: return 0;
+    }
+}
+
+static void update_clock_rotation_from_accel(void)
+{
+    uint8_t q = accel_to_quadrant(s_ax, s_ay, s_accel_valid);
+
+    if (q == s_rot_candidate) {
+        if (s_rot_stable_count < 255) s_rot_stable_count++;
+    } else {
+        s_rot_candidate = q;
+        s_rot_stable_count = 0;
+    }
+
+    if (s_rot_stable_count < 3 || q == s_last_rot_quadrant) {
+        return;
+    }
+
+    s_last_rot_quadrant = q;
+    int16_t deg10 = quadrant_to_deg10(q);
+
+    lv_obj_set_style_transform_pivot_x(s_time_lbl, lv_obj_get_width(s_time_lbl) / 2, 0);
+    lv_obj_set_style_transform_pivot_y(s_time_lbl, 22, 0);
+    lv_obj_set_style_transform_rotation(s_time_lbl, deg10, 0);
+
+    ESP_LOGI(TAG_UI, "Rotación reloj=%d° (ax=%d ay=%d)", (int)(deg10 / 10), (int)s_ax, (int)s_ay);
 }
 
 static void clock_timer_cb(lv_timer_t *t)
@@ -82,6 +164,8 @@ static void clock_timer_cb(lv_timer_t *t)
         lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
         lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
     }
+
+    update_clock_rotation_from_accel();
 }
 
 static void create_info_tile(lv_obj_t *tile, const char *title, const char *line1, const char *line2)
@@ -119,6 +203,7 @@ void ui_clock_create(void)
     lv_obj_set_style_bg_color(s_tileview, lv_color_hex(0x000000), 0);
     lv_obj_set_style_border_width(s_tileview, 0, 0);
     lv_obj_add_event_cb(s_tileview, tile_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_tileview, tile_gesture_cb, LV_EVENT_GESTURE, NULL);
 
     for (uint8_t i = 0; i < 5; i++) {
         s_tiles[i] = lv_tileview_add_tile(s_tileview, i, 0, LV_DIR_HOR);
@@ -138,7 +223,7 @@ void ui_clock_create(void)
     lv_label_set_text(s_time_lbl, "--:--:--");
     lv_obj_set_style_text_font(s_time_lbl, CLOCK_FONT, 0);
     lv_obj_set_style_text_align(s_time_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(s_time_lbl, lv_pct(98)); /* mejor adaptación horizontal */
+    lv_obj_set_width(s_time_lbl, lv_pct(98));
     lv_obj_set_style_pad_left(s_time_lbl, 2, 0);
     lv_obj_set_style_pad_right(s_time_lbl, 2, 0);
     lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
@@ -148,7 +233,6 @@ void ui_clock_create(void)
     lv_obj_set_style_text_color(hint, lv_color_hex(0x007722), 0);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -8);
 
-    /* Pantallas 2..5 */
     create_info_tile(s_tiles[1], "Pantalla 2", "Estado sensores", "(maqueta touch)");
     create_info_tile(s_tiles[2], "Pantalla 3", "Estado WiFi", "(maqueta touch)");
     create_info_tile(s_tiles[3], "Pantalla 4", "Estado reloj", "(maqueta touch)");
