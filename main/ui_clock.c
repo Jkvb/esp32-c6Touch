@@ -100,6 +100,34 @@ static void swipe_dx_window_reset(void)
     s_swipe_dx_count = 0;
 }
 
+
+static uint8_t swipe_steps_from_delta(int16_t dx)
+{
+    int32_t adx = dx >= 0 ? dx : -dx;
+    if (adx < SWIPE_NAV_DELTA_PX) return 0;
+
+    uint8_t steps = (uint8_t)(adx / SWIPE_NAV_DELTA_PX);
+    if (steps == 0) steps = 1;
+    if (steps > 4) steps = 4;
+    return steps;
+}
+
+static uint8_t swipe_target_tile(uint8_t current, int16_t dx)
+{
+    uint8_t steps = swipe_steps_from_delta(dx);
+    if (steps == 0) return current;
+
+    if (dx < 0) {
+        uint8_t max_forward = (uint8_t)(4 - current);
+        if (steps > max_forward) steps = max_forward;
+        return (uint8_t)(current + steps);
+    }
+
+    uint8_t max_back = current;
+    if (steps > max_back) steps = max_back;
+    return (uint8_t)(current - steps);
+}
+
 static void go_to_tile(uint8_t next, const char *reason)
 {
     if (next > 4) next = 4;
@@ -153,13 +181,11 @@ static void tile_pressing_cb(lv_event_t *e)
         return;
     }
 
-    if (dx_sum3 < 0 && s_active_tile < 4) {
-        go_to_tile((uint8_t)(s_active_tile + 1), "swipe drag sum3");
-        ESP_LOGI(TAG_UI, "Swipe drag aceptado -> sig pantalla dx=%d dy=%d sum3=%d |adx|=%d |ady|=%d", (int)dx, (int)dy, (int)dx_sum3, (int)adx, (int)ady);
-        s_swipe_consumed = true;
-    } else if (dx_sum3 > 0 && s_active_tile > 0) {
-        go_to_tile((uint8_t)(s_active_tile - 1), "swipe drag sum3");
-        ESP_LOGI(TAG_UI, "Swipe drag aceptado -> pantalla ant dx=%d dy=%d sum3=%d |adx|=%d |ady|=%d", (int)dx, (int)dy, (int)dx_sum3, (int)adx, (int)ady);
+    uint8_t target = swipe_target_tile(s_active_tile, dx_sum3);
+    if (target != s_active_tile) {
+        go_to_tile(target, "swipe drag sum3");
+        ESP_LOGI(TAG_UI, "Swipe drag aceptado -> tile=%u dx=%d dy=%d sum3=%d |adx|=%d |ady|=%d",
+                 (unsigned)(target + 1), (int)dx, (int)dy, (int)dx_sum3, (int)adx, (int)ady);
         s_swipe_consumed = true;
     }
 }
@@ -196,12 +222,11 @@ static void tile_release_cb(lv_event_t *e)
     }
 
     int16_t dir_dx = by_sum3 ? dx_sum3 : dx;
-    if (dir_dx < 0 && s_active_tile < 4) {
-        go_to_tile((uint8_t)(s_active_tile + 1), by_sum3 ? "swipe release sum3" : "swipe release total");
-        ESP_LOGI(TAG_UI, "Swipe release aceptado -> sig pantalla dx=%d dy=%d sum3=%d total=%d", (int)dx, (int)dy, (int)dx_sum3, (int)dx);
-    } else if (dir_dx > 0 && s_active_tile > 0) {
-        go_to_tile((uint8_t)(s_active_tile - 1), by_sum3 ? "swipe release sum3" : "swipe release total");
-        ESP_LOGI(TAG_UI, "Swipe release aceptado -> pantalla ant dx=%d dy=%d sum3=%d total=%d", (int)dx, (int)dy, (int)dx_sum3, (int)dx);
+    uint8_t target = swipe_target_tile(s_active_tile, dir_dx);
+    if (target != s_active_tile) {
+        go_to_tile(target, by_sum3 ? "swipe release sum3" : "swipe release total");
+        ESP_LOGI(TAG_UI, "Swipe release aceptado -> tile=%u dx=%d dy=%d sum3=%d total=%d",
+                 (unsigned)(target + 1), (int)dx, (int)dy, (int)dx_sum3, (int)dx);
     }
 
     s_swipe_consumed = false;
