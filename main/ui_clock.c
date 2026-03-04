@@ -36,10 +36,7 @@ static uint8_t s_rot_stable_count = 0;
 static lv_point_t s_press_start = {0, 0};
 static bool s_swipe_consumed = false;
 
-static const int16_t SWIPE_DRAG_MIN_X = 50;
-static const int16_t SWIPE_RELEASE_MIN_X = 50;
-/* Permite swipe diagonal leve (no exigir que X gane por mucho a Y). */
-static const int16_t SWIPE_VERTICAL_REJECT_GAP = 12;
+static const int16_t SWIPE_NAV_DELTA_PX = 50;
 
 
 #define UI_TOUCH_DEBUG_OVERLAY 1
@@ -112,7 +109,7 @@ static void tile_pressing_cb(lv_event_t *e)
     int16_t adx = dx >= 0 ? dx : -dx;
     int16_t ady = dy >= 0 ? dy : -dy;
 
-    if (adx < SWIPE_DRAG_MIN_X || (ady > (adx + SWIPE_VERTICAL_REJECT_GAP))) {
+    if (adx < SWIPE_NAV_DELTA_PX) {
         return;
     }
 
@@ -144,7 +141,7 @@ static void tile_release_cb(lv_event_t *e)
 
     ESP_LOGI(TAG_UI, "Swipe release dx=%d dy=%d |adx|=%d |ady|=%d consumed=%d", (int)dx, (int)dy, (int)adx, (int)ady, (int)s_swipe_consumed);
 
-    if (s_swipe_consumed || adx < SWIPE_RELEASE_MIN_X || (ady > (adx + SWIPE_VERTICAL_REJECT_GAP))) {
+    if (s_swipe_consumed || adx < SWIPE_NAV_DELTA_PX) {
         s_swipe_consumed = false;
         return;
     }
@@ -287,7 +284,7 @@ void ui_clock_create(void)
 {
     lv_obj_t *scr = lv_screen_active();
     ESP_LOGI(TAG_UI, "ui_clock_create init (modo 5 pantallas)");
-    ESP_LOGI(TAG_UI, "Swipe cfg drag_min=%d release_min=%d v_reject_gap=%d", (int)SWIPE_DRAG_MIN_X, (int)SWIPE_RELEASE_MIN_X, (int)SWIPE_VERTICAL_REJECT_GAP);
+    ESP_LOGI(TAG_UI, "Swipe cfg nav_delta_px=%d (|dx|)", (int)SWIPE_NAV_DELTA_PX);
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
