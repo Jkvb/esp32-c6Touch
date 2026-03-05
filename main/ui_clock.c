@@ -33,19 +33,6 @@ static uint8_t s_active_tile = 0;
 static uint8_t s_last_rot_quadrant = 0;
 static uint8_t s_rot_candidate = 0;
 static uint8_t s_rot_stable_count = 0;
-static lv_point_t s_press_start = {0, 0};
-static bool s_swipe_consumed = false;
-
-static const int16_t SWIPE_NAV_DELTA_PX = 6;
-static const uint8_t SWIPE_DELTA_WINDOW = 2;
-static const uint8_t SWIPE_AUTO_COMPLETE_PCT = 2;
-
-static int16_t s_swipe_dx_hist[2] = {0};
-static uint8_t s_swipe_dx_idx = 0;
-static uint8_t s_swipe_dx_count = 0;
-static lv_point_t s_prev_point = {0, 0};
-
-
 #define UI_TOUCH_DEBUG_OVERLAY 0
 #define UI_TOUCH_DBG_W 170
 #define UI_TOUCH_DBG_H 320
@@ -79,175 +66,6 @@ static void tile_changed_cb(lv_event_t *e)
 
 
 
-static int16_t swipe_dx_window_push_and_sum(int16_t dx_step)
-{
-    s_swipe_dx_hist[s_swipe_dx_idx] = dx_step;
-    s_swipe_dx_idx = (uint8_t)((s_swipe_dx_idx + 1U) % SWIPE_DELTA_WINDOW);
-    if (s_swipe_dx_count < SWIPE_DELTA_WINDOW) {
-        s_swipe_dx_count++;
-    }
-
-    int32_t sum = 0;
-    for (uint8_t i = 0; i < s_swipe_dx_count; i++) {
-        sum += s_swipe_dx_hist[i];
-    }
-    return (int16_t)sum;
-}
-
-static void swipe_dx_window_reset(void)
-{
-    memset(s_swipe_dx_hist, 0, sizeof(s_swipe_dx_hist));
-    s_swipe_dx_idx = 0;
-    s_swipe_dx_count = 0;
-}
-
-
-static uint8_t swipe_steps_from_delta(int16_t dx)
-{
-    int32_t adx = dx >= 0 ? dx : -dx;
-    if (adx < SWIPE_NAV_DELTA_PX) return 0;
-    return 1;
-}
-
-static uint8_t swipe_target_tile(uint8_t current, int16_t dx)
-{
-    uint8_t steps = swipe_steps_from_delta(dx);
-    if (steps == 0) return current;
-
-    if (dx < 0) {
-        uint8_t max_back = current;
-        if (steps > max_back) steps = max_back;
-        return (uint8_t)(current - steps);
-    }
-
-    uint8_t max_forward = (uint8_t)(4 - current);
-    if (steps > max_forward) steps = max_forward;
-    return (uint8_t)(current + steps);
-}
-
-static void go_to_tile(uint8_t next, const char *reason)
-{
-    if (next > 4) next = 4;
-    if (next == s_active_tile) return;
-    lv_tileview_set_tile_by_index(s_tileview, next, 0, LV_ANIM_ON);
-    ESP_LOGI(TAG_UI, "Pantalla activa=%d (%s)", next + 1, reason);
-}
-
-static void tile_press_cb(lv_event_t *e)
-{
-    (void)e;
-    s_swipe_consumed = false;
-
-    lv_indev_t *indev = lv_indev_active();
-    if (indev) {
-        lv_indev_get_point(indev, &s_press_start);
-    } else {
-        s_press_start.x = 0;
-        s_press_start.y = 0;
-    }
-
-    s_prev_point = s_press_start;
-    swipe_dx_window_reset();
-}
-
-static void tile_pressing_cb(lv_event_t *e)
-{
-    (void)e;
-
-    if (s_swipe_consumed) {
-        return;
-    }
-
-    lv_indev_t *indev = lv_indev_active();
-    if (!indev) return;
-
-    lv_point_t cur = {0};
-    lv_indev_get_point(indev, &cur);
-
-    int16_t dx = (int16_t)(cur.x - s_press_start.x);
-    int16_t dy = (int16_t)(cur.y - s_press_start.y);
-    int16_t adx = dx >= 0 ? dx : -dx;
-    int16_t ady = dy >= 0 ? dy : -dy;
-    int16_t dx_step = (int16_t)(cur.x - s_prev_point.x);
-    s_prev_point = cur;
-
-    int16_t dx_sum3 = swipe_dx_window_push_and_sum(dx_step);
-    int16_t auto_px = (int16_t)((UI_TOUCH_DBG_W * SWIPE_AUTO_COMPLETE_PCT) / 100);
-
-    if (adx < auto_px) {
-        return;
-    }
-
-    uint8_t target = swipe_target_tile(s_active_tile, dx);
-    if (target != s_active_tile) {
-        go_to_tile(target, "swipe drag auto40");
-        ESP_LOGI(TAG_UI, "Swipe drag auto-complete -> tile=%u dx=%d dy=%d sum3=%d auto_px=%d",
-                 (unsigned)(target + 1), (int)dx, (int)dy, (int)dx_sum3, (int)auto_px);
-        s_swipe_consumed = true;
-    }
-}
-
-static void tile_release_cb(lv_event_t *e)
-{
-    (void)e;
-
-    lv_indev_t *indev = lv_indev_active();
-    if (!indev) return;
-
-    lv_point_t cur = {0};
-    lv_indev_get_point(indev, &cur);
-
-    int16_t dx = (int16_t)(cur.x - s_press_start.x);
-    int16_t dy = (int16_t)(cur.y - s_press_start.y);
-    int16_t adx = dx >= 0 ? dx : -dx;
-    int16_t ady = dy >= 0 ? dy : -dy;
-
-    ESP_LOGI(TAG_UI, "Swipe release dx=%d dy=%d |adx|=%d |ady|=%d consumed=%d", (int)dx, (int)dy, (int)adx, (int)ady, (int)s_swipe_consumed);
-
-    int16_t dx_sum3 = 0;
-    for (uint8_t i = 0; i < s_swipe_dx_count; i++) {
-        dx_sum3 = (int16_t)(dx_sum3 + s_swipe_dx_hist[i]);
-    }
-    int16_t adx_sum3 = dx_sum3 >= 0 ? dx_sum3 : -dx_sum3;
-
-    int16_t auto_px = (int16_t)((UI_TOUCH_DBG_W * SWIPE_AUTO_COMPLETE_PCT) / 100);
-    bool by_auto = (adx >= auto_px);
-    bool by_sum3 = (adx_sum3 >= SWIPE_NAV_DELTA_PX);
-    bool by_total = (adx >= SWIPE_NAV_DELTA_PX);
-    if (s_swipe_consumed || (!by_auto && !by_sum3 && !by_total)) {
-        s_swipe_consumed = false;
-        swipe_dx_window_reset();
-        return;
-    }
-
-    int16_t dir_dx = (dx != 0) ? dx : dx_sum3;
-    uint8_t target = swipe_target_tile(s_active_tile, dir_dx);
-    if (target != s_active_tile) {
-        const char *reason = by_auto ? "swipe release auto40" : (by_sum3 ? "swipe release sum3" : "swipe release total");
-        go_to_tile(target, reason);
-        ESP_LOGI(TAG_UI, "Swipe release aceptado -> tile=%u dx=%d dy=%d sum3=%d auto=%d auto_px=%d",
-                 (unsigned)(target + 1), (int)dx, (int)dy, (int)dx_sum3, (int)by_auto, (int)auto_px);
-    }
-
-    s_swipe_consumed = false;
-    swipe_dx_window_reset();
-}
-
-static void tile_gesture_cb(lv_event_t *e)
-{
-    (void)e;
-    lv_indev_t *indev = lv_indev_active();
-    if (!indev) return;
-
-    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
-    if (dir == LV_DIR_LEFT && s_active_tile > 0) {
-        go_to_tile((uint8_t)(s_active_tile - 1), "gesture");
-        s_swipe_consumed = true;
-    } else if (dir == LV_DIR_RIGHT && s_active_tile < 4) {
-        go_to_tile((uint8_t)(s_active_tile + 1), "gesture");
-        s_swipe_consumed = true;
-    }
-}
 
 static uint8_t accel_to_quadrant(int16_t ax, int16_t ay, bool valid)
 {
@@ -360,7 +178,7 @@ void ui_clock_create(void)
 {
     lv_obj_t *scr = lv_screen_active();
     ESP_LOGI(TAG_UI, "ui_clock_create init (modo 5 pantallas)");
-    ESP_LOGI(TAG_UI, "Swipe cfg nav_delta_px=%d, win=%u, auto_complete=%u%%", (int)SWIPE_NAV_DELTA_PX, (unsigned)SWIPE_DELTA_WINDOW, (unsigned)SWIPE_AUTO_COMPLETE_PCT);
+    ESP_LOGI(TAG_UI, "Swipe nativo TileView habilitado (inercia + snap)");
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
@@ -370,20 +188,12 @@ void ui_clock_create(void)
     lv_obj_set_style_bg_color(s_tileview, lv_color_hex(0x000000), 0);
     lv_obj_set_style_border_width(s_tileview, 0, 0);
     lv_obj_add_event_cb(s_tileview, tile_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(s_tileview, tile_gesture_cb, LV_EVENT_GESTURE, NULL);
-    lv_obj_add_event_cb(s_tileview, tile_press_cb, LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(s_tileview, tile_pressing_cb, LV_EVENT_PRESSING, NULL);
-    lv_obj_add_event_cb(s_tileview, tile_release_cb, LV_EVENT_RELEASED, NULL);
     lv_obj_set_scroll_snap_x(s_tileview, LV_SCROLL_SNAP_CENTER);
+    lv_obj_set_scroll_snap_y(s_tileview, LV_SCROLL_SNAP_CENTER);
     lv_obj_set_scrollbar_mode(s_tileview, LV_SCROLLBAR_MODE_OFF);
 
     for (uint8_t i = 0; i < 5; i++) {
         s_tiles[i] = lv_tileview_add_tile(s_tileview, i, 0, LV_DIR_HOR);
-        lv_obj_add_flag(s_tiles[i], LV_OBJ_FLAG_GESTURE_BUBBLE);
-        lv_obj_add_event_cb(s_tiles[i], tile_press_cb, LV_EVENT_PRESSED, NULL);
-        lv_obj_add_event_cb(s_tiles[i], tile_pressing_cb, LV_EVENT_PRESSING, NULL);
-        lv_obj_add_event_cb(s_tiles[i], tile_release_cb, LV_EVENT_RELEASED, NULL);
-        lv_obj_add_event_cb(s_tiles[i], tile_gesture_cb, LV_EVENT_GESTURE, NULL);
     }
 
     /* Pantalla 1: Reloj adaptado a 170x320 */
