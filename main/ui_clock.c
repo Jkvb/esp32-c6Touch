@@ -45,7 +45,7 @@ static uint8_t s_swipe_dx_count = 0;
 static lv_point_t s_prev_point = {0, 0};
 
 
-#define UI_TOUCH_DEBUG_OVERLAY 1
+#define UI_TOUCH_DEBUG_OVERLAY 0
 #define UI_TOUCH_DBG_W 170
 #define UI_TOUCH_DBG_H 320
 
