@@ -21,6 +21,8 @@
 #define REG_CTRL8               0x09
 #define REG_AX_L                0x35
 
+#define ACCEL_I2C_TIMEOUT_MS    12
+
 static const char *TAG = "ACCEL";
 
 static uint8_t s_addr = 0;
@@ -68,13 +70,13 @@ static esp_err_t accel_i2c_init_once(void)
 
 static esp_err_t accel_rd(uint8_t addr, uint8_t reg, void *buf, size_t len)
 {
-    return i2c_master_write_read_device(I2C_PORT_NUM, addr, &reg, 1, buf, len, pdMS_TO_TICKS(100));
+    return i2c_master_write_read_device(I2C_PORT_NUM, addr, &reg, 1, buf, len, pdMS_TO_TICKS(ACCEL_I2C_TIMEOUT_MS));
 }
 
 static esp_err_t accel_wr(uint8_t addr, uint8_t reg, uint8_t value)
 {
     uint8_t data[2] = {reg, value};
-    return i2c_master_write_to_device(I2C_PORT_NUM, addr, data, sizeof(data), pdMS_TO_TICKS(100));
+    return i2c_master_write_to_device(I2C_PORT_NUM, addr, data, sizeof(data), pdMS_TO_TICKS(ACCEL_I2C_TIMEOUT_MS));
 }
 
 static bool accel_probe_addr(uint8_t addr, uint8_t *who_am_i)

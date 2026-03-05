@@ -51,6 +51,8 @@ static void accel_task(void *arg)
 {
     (void)arg;
     uint32_t err_count = 0;
+    const TickType_t ok_delay = pdMS_TO_TICKS(140);
+    const TickType_t err_delay = pdMS_TO_TICKS(320);
 
     while (1) {
         int16_t x = 0, y = 0, z = 0;
@@ -58,16 +60,18 @@ static void accel_task(void *arg)
         if (err == ESP_OK) {
             err_count = 0;
             ui_clock_set_accel(x, y, true);
-        } else {
-            err_count++;
-            if (err_count >= 3U) {
-                ui_clock_set_accel(0, 0, false);
-            }
-            if (err_count == 1 || (err_count % 20U) == 0U) {
-                ESP_LOGW(TAG, "Lectura accel fallo (%s), count=%lu", esp_err_to_name(err), (unsigned long)err_count);
-            }
+            vTaskDelay(ok_delay);
+            continue;
         }
-        vTaskDelay(pdMS_TO_TICKS(80));
+
+        err_count++;
+        if (err_count >= 3U) {
+            ui_clock_set_accel(0, 0, false);
+        }
+        if (err_count == 1 || (err_count % 10U) == 0U) {
+            ESP_LOGW(TAG, "Lectura accel fallo (%s), count=%lu", esp_err_to_name(err), (unsigned long)err_count);
+        }
+        vTaskDelay(err_delay);
     }
 }
 
