@@ -38,7 +38,7 @@ static bool s_swipe_consumed = false;
 
 static const int16_t SWIPE_NAV_DELTA_PX = 6;
 static const uint8_t SWIPE_DELTA_WINDOW = 2;
-static const uint8_t SWIPE_AUTO_COMPLETE_PCT = 40;
+static const uint8_t SWIPE_AUTO_COMPLETE_PCT = 2;
 
 static int16_t s_swipe_dx_hist[2] = {0};
 static uint8_t s_swipe_dx_idx = 0;
