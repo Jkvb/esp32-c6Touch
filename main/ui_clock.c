@@ -38,6 +38,7 @@ static bool s_swipe_consumed = false;
 
 static const int16_t SWIPE_NAV_DELTA_PX = 6;
 static const uint8_t SWIPE_DELTA_WINDOW = 2;
+static const uint8_t SWIPE_AUTO_COMPLETE_PCT = 40;
 
 static int16_t s_swipe_dx_hist[2] = {0};
 static uint8_t s_swipe_dx_idx = 0;
@@ -105,11 +106,7 @@ static uint8_t swipe_steps_from_delta(int16_t dx)
 {
     int32_t adx = dx >= 0 ? dx : -dx;
     if (adx < SWIPE_NAV_DELTA_PX) return 0;
-
-    uint8_t steps = (uint8_t)(adx / SWIPE_NAV_DELTA_PX);
-    if (steps == 0) steps = 1;
-    if (steps > 4) steps = 4;
-    return steps;
+    return 1;
 }
 
 static uint8_t swipe_target_tile(uint8_t current, int16_t dx)
@@ -175,17 +172,17 @@ static void tile_pressing_cb(lv_event_t *e)
     s_prev_point = cur;
 
     int16_t dx_sum3 = swipe_dx_window_push_and_sum(dx_step);
-    int16_t adx_sum3 = dx_sum3 >= 0 ? dx_sum3 : -dx_sum3;
+    int16_t auto_px = (int16_t)((UI_TOUCH_DBG_W * SWIPE_AUTO_COMPLETE_PCT) / 100);
 
-    if (adx_sum3 < SWIPE_NAV_DELTA_PX) {
+    if (adx < auto_px) {
         return;
     }
 
-    uint8_t target = swipe_target_tile(s_active_tile, dx_sum3);
+    uint8_t target = swipe_target_tile(s_active_tile, dx);
     if (target != s_active_tile) {
-        go_to_tile(target, "swipe drag sum3");
-        ESP_LOGI(TAG_UI, "Swipe drag aceptado -> tile=%u dx=%d dy=%d sum3=%d |adx|=%d |ady|=%d",
-                 (unsigned)(target + 1), (int)dx, (int)dy, (int)dx_sum3, (int)adx, (int)ady);
+        go_to_tile(target, "swipe drag auto40");
+        ESP_LOGI(TAG_UI, "Swipe drag auto-complete -> tile=%u dx=%d dy=%d sum3=%d auto_px=%d",
+                 (unsigned)(target + 1), (int)dx, (int)dy, (int)dx_sum3, (int)auto_px);
         s_swipe_consumed = true;
     }
 }
@@ -213,20 +210,23 @@ static void tile_release_cb(lv_event_t *e)
     }
     int16_t adx_sum3 = dx_sum3 >= 0 ? dx_sum3 : -dx_sum3;
 
+    int16_t auto_px = (int16_t)((UI_TOUCH_DBG_W * SWIPE_AUTO_COMPLETE_PCT) / 100);
+    bool by_auto = (adx >= auto_px);
     bool by_sum3 = (adx_sum3 >= SWIPE_NAV_DELTA_PX);
     bool by_total = (adx >= SWIPE_NAV_DELTA_PX);
-    if (s_swipe_consumed || (!by_sum3 && !by_total)) {
+    if (s_swipe_consumed || (!by_auto && !by_sum3 && !by_total)) {
         s_swipe_consumed = false;
         swipe_dx_window_reset();
         return;
     }
 
-    int16_t dir_dx = by_sum3 ? dx_sum3 : dx;
+    int16_t dir_dx = (dx != 0) ? dx : dx_sum3;
     uint8_t target = swipe_target_tile(s_active_tile, dir_dx);
     if (target != s_active_tile) {
-        go_to_tile(target, by_sum3 ? "swipe release sum3" : "swipe release total");
-        ESP_LOGI(TAG_UI, "Swipe release aceptado -> tile=%u dx=%d dy=%d sum3=%d total=%d",
-                 (unsigned)(target + 1), (int)dx, (int)dy, (int)dx_sum3, (int)dx);
+        const char *reason = by_auto ? "swipe release auto40" : (by_sum3 ? "swipe release sum3" : "swipe release total");
+        go_to_tile(target, reason);
+        ESP_LOGI(TAG_UI, "Swipe release aceptado -> tile=%u dx=%d dy=%d sum3=%d auto=%d auto_px=%d",
+                 (unsigned)(target + 1), (int)dx, (int)dy, (int)dx_sum3, (int)by_auto, (int)auto_px);
     }
 
     s_swipe_consumed = false;
@@ -360,7 +360,7 @@ void ui_clock_create(void)
 {
     lv_obj_t *scr = lv_screen_active();
     ESP_LOGI(TAG_UI, "ui_clock_create init (modo 5 pantallas)");
-    ESP_LOGI(TAG_UI, "Swipe cfg nav_delta_px=%d over last %u dx steps", (int)SWIPE_NAV_DELTA_PX, (unsigned)SWIPE_DELTA_WINDOW);
+    ESP_LOGI(TAG_UI, "Swipe cfg nav_delta_px=%d, win=%u, auto_complete=%u%%", (int)SWIPE_NAV_DELTA_PX, (unsigned)SWIPE_DELTA_WINDOW, (unsigned)SWIPE_AUTO_COMPLETE_PCT);
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
