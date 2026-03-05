@@ -36,10 +36,10 @@ static uint8_t s_rot_stable_count = 0;
 static lv_point_t s_press_start = {0, 0};
 static bool s_swipe_consumed = false;
 
-static const int16_t SWIPE_NAV_DELTA_PX = 20;
-static const uint8_t SWIPE_DELTA_WINDOW = 3;
+static const int16_t SWIPE_NAV_DELTA_PX = 12;
+static const uint8_t SWIPE_DELTA_WINDOW = 2;
 
-static int16_t s_swipe_dx_hist[3] = {0};
+static int16_t s_swipe_dx_hist[2] = {0};
 static uint8_t s_swipe_dx_idx = 0;
 static uint8_t s_swipe_dx_count = 0;
 static lv_point_t s_prev_point = {0, 0};
