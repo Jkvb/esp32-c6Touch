@@ -118,14 +118,14 @@ static uint8_t swipe_target_tile(uint8_t current, int16_t dx)
     if (steps == 0) return current;
 
     if (dx < 0) {
-        uint8_t max_forward = (uint8_t)(4 - current);
-        if (steps > max_forward) steps = max_forward;
-        return (uint8_t)(current + steps);
+        uint8_t max_back = current;
+        if (steps > max_back) steps = max_back;
+        return (uint8_t)(current - steps);
     }
 
-    uint8_t max_back = current;
-    if (steps > max_back) steps = max_back;
-    return (uint8_t)(current - steps);
+    uint8_t max_forward = (uint8_t)(4 - current);
+    if (steps > max_forward) steps = max_forward;
+    return (uint8_t)(current + steps);
 }
 
 static void go_to_tile(uint8_t next, const char *reason)
@@ -240,11 +240,11 @@ static void tile_gesture_cb(lv_event_t *e)
     if (!indev) return;
 
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
-    if (dir == LV_DIR_LEFT && s_active_tile < 4) {
-        go_to_tile((uint8_t)(s_active_tile + 1), "gesture");
-        s_swipe_consumed = true;
-    } else if (dir == LV_DIR_RIGHT && s_active_tile > 0) {
+    if (dir == LV_DIR_LEFT && s_active_tile > 0) {
         go_to_tile((uint8_t)(s_active_tile - 1), "gesture");
+        s_swipe_consumed = true;
+    } else if (dir == LV_DIR_RIGHT && s_active_tile < 4) {
+        go_to_tile((uint8_t)(s_active_tile + 1), "gesture");
         s_swipe_consumed = true;
     }
 }
