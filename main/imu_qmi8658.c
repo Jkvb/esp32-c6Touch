@@ -40,7 +40,10 @@ static esp_err_t i2c_init_once(void)
         .master.clk_speed = I2C_FREQ_HZ,
     };
     ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &conf));
-    ESP_ERROR_CHECK(i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0));
+    esp_err_t r = i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0);
+    if (r != ESP_OK && r != ESP_ERR_INVALID_STATE) {
+        ESP_ERROR_CHECK(r);
+    }
     inited = true;
     return ESP_OK;
 }

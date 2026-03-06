@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "freertos/FreeRTOS.h"
+
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
@@ -12,6 +14,9 @@
 #include "esp_lcd_panel_ops.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
+#include "driver/i2c.h"
+
+#include "ui_clock.h"
 
 static const char *TAG = "DISP";
 
@@ -38,6 +43,109 @@ static const char *TAG = "DISP";
 #define LCD_INVERT_COLOR  0
 
 static esp_timer_handle_t s_lv_tick_timer;
+
+/* Touch (CST816S) */
+#define TOUCH_I2C_PORT      I2C_NUM_0
+#define TOUCH_PIN_SCL       8
+#define TOUCH_PIN_SDA       18
+#define TOUCH_I2C_FREQ_HZ   400000
+#define TOUCH_ADDR_CST816   0x15
+
+static bool s_touch_inited = false;
+static lv_indev_t *s_touch_indev = NULL;
+
+static esp_err_t touch_i2c_init_once(void)
+{
+    static bool i2c_inited = false;
+    if (i2c_inited) return ESP_OK;
+
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = TOUCH_PIN_SDA,
+        .scl_io_num = TOUCH_PIN_SCL,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = TOUCH_I2C_FREQ_HZ,
+    };
+    ESP_ERROR_CHECK(i2c_param_config(TOUCH_I2C_PORT, &conf));
+    esp_err_t r = i2c_driver_install(TOUCH_I2C_PORT, conf.mode, 0, 0, 0);
+    if (r != ESP_OK && r != ESP_ERR_INVALID_STATE) {
+        return r;
+    }
+
+    i2c_inited = true;
+    ESP_LOGI(TAG, "I2C touch listo: SDA=%d SCL=%d", TOUCH_PIN_SDA, TOUCH_PIN_SCL);
+    return ESP_OK;
+}
+
+static esp_err_t touch_rd(uint8_t reg, uint8_t *buf, size_t len)
+{
+    return i2c_master_write_read_device(TOUCH_I2C_PORT, TOUCH_ADDR_CST816,
+                                        &reg, 1, buf, len, pdMS_TO_TICKS(30));
+}
+
+static esp_err_t touch_probe(void)
+{
+    uint8_t b[2] = {0};
+    esp_err_t r = touch_rd(0xA7, b, sizeof(b)); /* ChipID/FwVer */
+    if (r != ESP_OK) return r;
+    ESP_LOGI(TAG, "Touch detectado addr=0x%02X chip=0x%02X fw=0x%02X", TOUCH_ADDR_CST816, b[0], b[1]);
+    return ESP_OK;
+}
+
+static void touch_scan_bus(void)
+{
+    int found = 0;
+    for (uint8_t addr = 0x08; addr < 0x78; addr++) {
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, (uint8_t)((addr << 1) | I2C_MASTER_WRITE), true);
+        i2c_master_stop(cmd);
+        esp_err_t r = i2c_master_cmd_begin(TOUCH_I2C_PORT, cmd, pdMS_TO_TICKS(10));
+        i2c_cmd_link_delete(cmd);
+
+        if (r == ESP_OK) {
+            ESP_LOGI(TAG, "I2C device encontrado: 0x%02X", addr);
+            found++;
+        }
+    }
+    if (found == 0) {
+        ESP_LOGW(TAG, "I2C scan: no se detectaron dispositivos en SDA=%d/SCL=%d", TOUCH_PIN_SDA, TOUCH_PIN_SCL);
+    }
+}
+
+static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
+{
+    (void)indev;
+    uint8_t p[6] = {0};
+    esp_err_t r = touch_rd(0x01, p, sizeof(p));
+    if (r != ESP_OK) {
+        data->state = LV_INDEV_STATE_RELEASED;
+        ui_clock_set_touch_debug(0, 0, false);
+        return;
+    }
+
+    uint8_t points = p[1] & 0x0F;
+    bool pressed = points > 0;
+    if (!pressed) {
+        data->state = LV_INDEV_STATE_RELEASED;
+        ui_clock_set_touch_debug(0, 0, false);
+        return;
+    }
+
+    int16_t x = (int16_t)(((p[2] & 0x0F) << 8) | p[3]);
+    int16_t y = (int16_t)(((p[4] & 0x0F) << 8) | p[5]);
+
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x > (LCD_H_RES - 1)) x = (LCD_H_RES - 1);
+    if (y > (LCD_V_RES - 1)) y = (LCD_V_RES - 1);
+
+    data->state = LV_INDEV_STATE_PRESSED;
+    data->point.x = x;
+    data->point.y = y;
+    ui_clock_set_touch_debug(x, y, true);
+}
 
 static esp_lcd_panel_handle_t s_panel = NULL;
 static lv_display_t *s_disp = NULL;
@@ -154,6 +262,17 @@ lv_display_t* display_st7789_lvgl_init(void)
 
     lv_display_set_buffers(disp, buf, NULL, buf_sz, LV_DISPLAY_RENDER_MODE_PARTIAL);
 
+    if (touch_i2c_init_once() == ESP_OK && touch_probe() == ESP_OK) {
+        s_touch_indev = lv_indev_create();
+        lv_indev_set_type(s_touch_indev, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_read_cb(s_touch_indev, touch_read_cb);
+        s_touch_inited = true;
+        ESP_LOGI(TAG, "Touch LVGL listo (CST816)");
+    } else {
+        ESP_LOGW(TAG, "Touch no inicializó. Revisa pins SDA/SCL y addr 0x15.");
+        touch_scan_bus();
+    }
+
     esp_lcd_panel_io_callbacks_t cbs = {
         .on_color_trans_done = notify_lvgl_flush_ready,
     };
@@ -170,7 +289,8 @@ lv_display_t* display_st7789_lvgl_init(void)
     s_disp  = disp;
     s_rot   = DISP_ROT_0;
 
-    ESP_LOGI(TAG, "Display + LVGL listo (%dx%d), gap(%d,%d).", LCD_H_RES, LCD_V_RES, LCD_X_GAP, LCD_Y_GAP);
+    ESP_LOGI(TAG, "Display + LVGL listo (%dx%d), gap(%d,%d), touch=%s.",
+             LCD_H_RES, LCD_V_RES, LCD_X_GAP, LCD_Y_GAP, s_touch_inited ? "OK" : "OFF");
     return disp;
 }
 
