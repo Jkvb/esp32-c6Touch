@@ -10,6 +10,7 @@
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "esp_sntp.h"
+#include "nvs_flash.h"
 
 #include "display_st7789_lvgl.h"
 #include "ui_clock.h"
@@ -129,6 +130,23 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 }
 
+static esp_err_t app_nvs_init_once(void)
+{
+    static bool s_nvs_ready = false;
+    if (s_nvs_ready) return ESP_OK;
+
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+
+    if (err == ESP_OK) {
+        s_nvs_ready = true;
+    }
+    return err;
+}
+
 static esp_err_t wifi_connect_blocking(void)
 {
     if (strlen(s_wifi_ssid) == 0) {
@@ -136,31 +154,47 @@ static esp_err_t wifi_connect_blocking(void)
         return ESP_ERR_INVALID_ARG;
     }
 
+    ESP_ERROR_CHECK(app_nvs_init_once());
+
     if (!s_wifi_event_group) s_wifi_event_group = xEventGroupCreate();
 
     static bool s_netif_inited = false;
     if (!s_netif_inited) {
         ESP_ERROR_CHECK(esp_netif_init());
-        ESP_ERROR_CHECK(esp_event_loop_create_default());
+        esp_err_t evr = esp_event_loop_create_default();
+        if (evr != ESP_OK && evr != ESP_ERR_INVALID_STATE) {
+            ESP_ERROR_CHECK(evr);
+        }
         esp_netif_create_default_wifi_sta();
         s_netif_inited = true;
     }
 
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    static bool s_wifi_driver_inited = false;
+    if (!s_wifi_driver_inited) {
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        esp_err_t wr = esp_wifi_init(&cfg);
+        if (wr != ESP_OK && wr != ESP_ERR_INVALID_STATE) {
+            ESP_ERROR_CHECK(wr);
+        }
+        s_wifi_driver_inited = true;
+    }
 
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                        ESP_EVENT_ANY_ID,
-                                                        &wifi_event_handler,
-                                                        NULL,
-                                                        &instance_any_id));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                        IP_EVENT_STA_GOT_IP,
-                                                        &wifi_event_handler,
-                                                        NULL,
-                                                        &instance_got_ip));
+    static bool s_wifi_handlers_registered = false;
+    if (!s_wifi_handlers_registered) {
+        esp_event_handler_instance_t instance_any_id;
+        esp_event_handler_instance_t instance_got_ip;
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                            ESP_EVENT_ANY_ID,
+                                                            &wifi_event_handler,
+                                                            NULL,
+                                                            &instance_any_id));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                            IP_EVENT_STA_GOT_IP,
+                                                            &wifi_event_handler,
+                                                            NULL,
+                                                            &instance_got_ip));
+        s_wifi_handlers_registered = true;
+    }
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(wifi_apply_runtime_config());
