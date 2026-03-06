@@ -56,12 +56,41 @@ static uint8_t tile_index_from_obj(lv_obj_t *obj)
     return 0;
 }
 
+static void set_active_tile(uint8_t idx, lv_anim_enable_t anim)
+{
+    if (!s_tileview) return;
+    if (idx > 4) idx = 4;
+    s_active_tile = idx;
+    lv_tileview_set_tile_by_index(s_tileview, idx, 0, anim);
+}
+
 static void tile_changed_cb(lv_event_t *e)
 {
     lv_obj_t *tv = lv_event_get_target(e);
     lv_obj_t *act = lv_tileview_get_tile_act(tv);
     s_active_tile = tile_index_from_obj(act);
     ESP_LOGI(TAG_UI, "Pantalla activa=%d (touch swipe)", s_active_tile + 1);
+}
+
+static void tileview_gesture_cb(lv_event_t *e)
+{
+    (void)e;
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev) return;
+
+    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+    uint8_t next = s_active_tile;
+
+    if (dir == LV_DIR_LEFT && s_active_tile < 4) {
+        next = s_active_tile + 1;
+    } else if (dir == LV_DIR_RIGHT && s_active_tile > 0) {
+        next = s_active_tile - 1;
+    }
+
+    if (next != s_active_tile) {
+        set_active_tile(next, LV_ANIM_ON);
+        ESP_LOGI(TAG_UI, "Swipe lateral: pantalla=%d", next + 1);
+    }
 }
 
 
@@ -190,10 +219,17 @@ void ui_clock_create(void)
     lv_obj_add_event_cb(s_tileview, tile_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_set_scroll_snap_x(s_tileview, LV_SCROLL_SNAP_CENTER);
     lv_obj_set_scroll_snap_y(s_tileview, LV_SCROLL_SNAP_CENTER);
+    lv_obj_set_scroll_dir(s_tileview, LV_DIR_HOR);
     lv_obj_set_scrollbar_mode(s_tileview, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_clear_flag(s_tileview, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_clear_flag(s_tileview, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_add_flag(s_tileview, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(s_tileview, tileview_gesture_cb, LV_EVENT_GESTURE, NULL);
 
     for (uint8_t i = 0; i < 5; i++) {
         s_tiles[i] = lv_tileview_add_tile(s_tileview, i, 0, LV_DIR_HOR);
+        lv_obj_clear_flag(s_tiles[i], LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(s_tiles[i], lv_pct(100), lv_pct(100));
     }
 
     /* Pantalla 1: Reloj adaptado a 170x320 */
@@ -225,7 +261,7 @@ void ui_clock_create(void)
     create_info_tile(s_tiles[3], "Pantalla 4", "Estado reloj", "(maqueta touch)");
     create_info_tile(s_tiles[4], "Pantalla 5", "Debug", "(maqueta touch)");
 
-    lv_tileview_set_tile_by_index(s_tileview, 0, 0, LV_ANIM_OFF);
+    set_active_tile(0, LV_ANIM_OFF);
 
 #if UI_TOUCH_DEBUG_OVERLAY
     s_touch_cross_h = lv_obj_create(scr);
