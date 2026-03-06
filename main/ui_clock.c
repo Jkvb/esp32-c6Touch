@@ -54,12 +54,6 @@ static int16_t s_touch_diag_last_y = -32768;
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
 
-static lv_obj_t *s_cfg_ssid_ta = NULL;
-static lv_obj_t *s_cfg_pass_ta = NULL;
-static lv_obj_t *s_cfg_networks_dd = NULL;
-static lv_obj_t *s_cfg_status_lbl = NULL;
-static lv_obj_t *s_cfg_kb = NULL;
-static lv_obj_t *s_cfg_active_ta = NULL;
 
 static uint8_t tile_index_from_obj(lv_obj_t *obj)
 {
@@ -154,145 +148,79 @@ static void tileview_touch_diag_cb(lv_event_t *e)
 
 
 
-static void cfg_set_status(const char *txt, lv_color_t color)
+static lv_obj_t *s_cb_status_lbl[5] = {0};
+
+static void checkbox_changed_cb(lv_event_t *e)
 {
-    if (!s_cfg_status_lbl) return;
-    lv_label_set_text(s_cfg_status_lbl, txt ? txt : "");
-    lv_obj_set_style_text_color(s_cfg_status_lbl, color, 0);
-}
+    lv_obj_t *cb = lv_event_get_target(e);
+    uintptr_t idx_u = (uintptr_t)lv_event_get_user_data(e);
+    uint8_t idx = (uint8_t)idx_u;
+    bool checked = lv_obj_has_state(cb, LV_STATE_CHECKED);
 
-static void wifi_save_btn_cb(lv_event_t *e)
-{
-    (void)e;
-    if (!s_cfg_ssid_ta || !s_cfg_pass_ta) return;
-
-    const char *ssid = lv_textarea_get_text(s_cfg_ssid_ta);
-    const char *pass = lv_textarea_get_text(s_cfg_pass_ta);
-
-    if (!ssid || strlen(ssid) == 0) {
-        cfg_set_status("Ingresa SSID", lv_color_hex(0xFF5555));
-        return;
-    }
-
-    if (s_wifi_cb) {
-        s_wifi_cb(ssid, pass ? pass : "");
-        cfg_set_status("Red guardada", lv_color_hex(0x00FF88));
-    } else {
-        cfg_set_status("Sin callback WiFi", lv_color_hex(0xFFAA33));
+    if (idx < 5 && s_cb_status_lbl[idx]) {
+        lv_label_set_text_fmt(s_cb_status_lbl[idx], "Estado: %s", checked ? "ACTIVO" : "INACTIVO");
     }
 }
 
-static void wifi_scan_btn_cb(lv_event_t *e)
+static void style_checkbox_variant(lv_obj_t *cb, uint8_t style_id)
 {
-    (void)e;
-    if (s_wifi_scan_cb) {
-        s_wifi_scan_cb();
-        cfg_set_status("Escaneando redes...", lv_color_hex(0x00DDFF));
-    } else {
-        cfg_set_status("Scan no disponible", lv_color_hex(0xFFAA33));
+    switch (style_id) {
+        case 0: /* Verde clásico */
+            lv_obj_set_style_text_color(cb, lv_color_hex(0x00FF66), 0);
+            lv_obj_set_style_bg_color(cb, lv_color_hex(0x00AA44), LV_PART_INDICATOR | LV_STATE_CHECKED);
+            break;
+        case 1: /* Azul sólido */
+            lv_obj_set_style_border_color(cb, lv_color_hex(0x33AAFF), LV_PART_INDICATOR);
+            lv_obj_set_style_bg_color(cb, lv_color_hex(0x0077CC), LV_PART_INDICATOR | LV_STATE_CHECKED);
+            lv_obj_set_style_text_color(cb, lv_color_hex(0x66CCFF), 0);
+            break;
+        case 2: /* Naranja redondo */
+            lv_obj_set_style_radius(cb, 12, LV_PART_INDICATOR);
+            lv_obj_set_style_border_width(cb, 2, LV_PART_INDICATOR);
+            lv_obj_set_style_border_color(cb, lv_color_hex(0xFF9933), LV_PART_INDICATOR);
+            lv_obj_set_style_bg_color(cb, lv_color_hex(0xFF6600), LV_PART_INDICATOR | LV_STATE_CHECKED);
+            lv_obj_set_style_text_color(cb, lv_color_hex(0xFFAA55), 0);
+            break;
+        case 3: /* Morado glow */
+            lv_obj_set_style_border_color(cb, lv_color_hex(0xAA66FF), LV_PART_INDICATOR);
+            lv_obj_set_style_shadow_width(cb, 8, LV_PART_INDICATOR | LV_STATE_CHECKED);
+            lv_obj_set_style_shadow_color(cb, lv_color_hex(0xAA66FF), LV_PART_INDICATOR | LV_STATE_CHECKED);
+            lv_obj_set_style_bg_color(cb, lv_color_hex(0x8844FF), LV_PART_INDICATOR | LV_STATE_CHECKED);
+            lv_obj_set_style_text_color(cb, lv_color_hex(0xCC99FF), 0);
+            break;
+        case 4: /* Rojo invertido */
+        default:
+            lv_obj_set_style_bg_color(cb, lv_color_hex(0x660000), LV_PART_INDICATOR);
+            lv_obj_set_style_bg_color(cb, lv_color_hex(0xFF3333), LV_PART_INDICATOR | LV_STATE_CHECKED);
+            lv_obj_set_style_border_color(cb, lv_color_hex(0xFF6666), LV_PART_INDICATOR);
+            lv_obj_set_style_text_color(cb, lv_color_hex(0xFF7777), 0);
+            break;
     }
 }
 
-static void wifi_network_selected_cb(lv_event_t *e)
-{
-    (void)e;
-    if (!s_cfg_networks_dd || !s_cfg_ssid_ta) return;
-
-    char sel[64] = {0};
-    lv_dropdown_get_selected_str(s_cfg_networks_dd, sel, sizeof(sel));
-    if (sel[0] != '\0' && strcmp(sel, "(sin resultados)") != 0) {
-        lv_textarea_set_text(s_cfg_ssid_ta, sel);
-        cfg_set_status("SSID seleccionado", lv_color_hex(0x66FF66));
-    }
-}
-
-static void cfg_textarea_focus_cb(lv_event_t *e)
-{
-    if (!s_cfg_kb) return;
-
-    lv_event_code_t code = lv_event_get_code(e);
-    lv_obj_t *ta = lv_event_get_target(e);
-
-    if (code == LV_EVENT_FOCUSED || code == LV_EVENT_CLICKED) {
-        s_cfg_active_ta = ta;
-        lv_keyboard_set_textarea(s_cfg_kb, ta);
-        lv_obj_clear_flag(s_cfg_kb, LV_OBJ_FLAG_HIDDEN);
-    }
-}
-
-static void cfg_keyboard_event_cb(lv_event_t *e)
-{
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code == LV_EVENT_READY || code == LV_EVENT_CANCEL) {
-        lv_keyboard_set_textarea(s_cfg_kb, NULL);
-        s_cfg_active_ta = NULL;
-        lv_obj_add_flag(s_cfg_kb, LV_OBJ_FLAG_HIDDEN);
-    }
-}
-
-static void create_wifi_config_tile(lv_obj_t *tile)
+static void create_checkbox_tile(lv_obj_t *tile, uint8_t idx)
 {
     lv_obj_set_style_bg_color(tile, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(tile, 0, 0);
 
     lv_obj_t *ttl = lv_label_create(tile);
-    lv_label_set_text(ttl, "Configuracion WiFi");
-    lv_obj_set_style_text_color(ttl, lv_color_hex(0x00FF88), 0);
-    lv_obj_align(ttl, LV_ALIGN_TOP_MID, 0, 8);
+    lv_label_set_text_fmt(ttl, "Pantalla %d", (int)(idx + 1));
+    lv_obj_set_style_text_color(ttl, lv_color_hex(0x00ff66), 0);
+    lv_obj_align(ttl, LV_ALIGN_TOP_MID, 0, 16);
 
-    s_cfg_ssid_ta = lv_textarea_create(tile);
-    lv_obj_set_size(s_cfg_ssid_ta, 154, 34);
-    lv_obj_align(s_cfg_ssid_ta, LV_ALIGN_TOP_MID, 0, 32);
-    lv_textarea_set_placeholder_text(s_cfg_ssid_ta, "SSID");
-    lv_textarea_set_one_line(s_cfg_ssid_ta, true);
-    lv_obj_add_event_cb(s_cfg_ssid_ta, cfg_textarea_focus_cb, LV_EVENT_FOCUSED, NULL);
-    lv_obj_add_event_cb(s_cfg_ssid_ta, cfg_textarea_focus_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *cb = lv_checkbox_create(tile);
+    char cb_txt[32];
+    snprintf(cb_txt, sizeof(cb_txt), "Estilo checkbox %d", (int)(idx + 1));
+    lv_checkbox_set_text(cb, cb_txt);
+    style_checkbox_variant(cb, idx);
+    lv_obj_align(cb, LV_ALIGN_CENTER, 0, -8);
+    lv_obj_add_event_cb(cb, checkbox_changed_cb, LV_EVENT_VALUE_CHANGED, (void *)(uintptr_t)idx);
 
-    s_cfg_pass_ta = lv_textarea_create(tile);
-    lv_obj_set_size(s_cfg_pass_ta, 154, 34);
-    lv_obj_align(s_cfg_pass_ta, LV_ALIGN_TOP_MID, 0, 72);
-    lv_textarea_set_placeholder_text(s_cfg_pass_ta, "Contrasena");
-    lv_textarea_set_password_mode(s_cfg_pass_ta, true);
-    lv_textarea_set_one_line(s_cfg_pass_ta, true);
-    lv_obj_add_event_cb(s_cfg_pass_ta, cfg_textarea_focus_cb, LV_EVENT_FOCUSED, NULL);
-    lv_obj_add_event_cb(s_cfg_pass_ta, cfg_textarea_focus_cb, LV_EVENT_CLICKED, NULL);
-
-    s_cfg_networks_dd = lv_dropdown_create(tile);
-    lv_obj_set_size(s_cfg_networks_dd, 154, LV_SIZE_CONTENT);
-    lv_obj_align(s_cfg_networks_dd, LV_ALIGN_TOP_MID, 0, 112);
-    lv_dropdown_set_options(s_cfg_networks_dd, "(sin resultados)");
-    lv_obj_add_event_cb(s_cfg_networks_dd, wifi_network_selected_cb, LV_EVENT_VALUE_CHANGED, NULL);
-
-    lv_obj_t *btn_scan = lv_button_create(tile);
-    lv_obj_set_size(btn_scan, 74, 30);
-    lv_obj_align(btn_scan, LV_ALIGN_TOP_LEFT, 8, 150);
-    lv_obj_add_event_cb(btn_scan, wifi_scan_btn_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *scan_lbl = lv_label_create(btn_scan);
-    lv_label_set_text(scan_lbl, "Scan");
-    lv_obj_center(scan_lbl);
-
-    lv_obj_t *btn_save = lv_button_create(tile);
-    lv_obj_set_size(btn_save, 74, 30);
-    lv_obj_align(btn_save, LV_ALIGN_TOP_RIGHT, -8, 150);
-    lv_obj_add_event_cb(btn_save, wifi_save_btn_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *save_lbl = lv_label_create(btn_save);
-    lv_label_set_text(save_lbl, "Guardar");
-    lv_obj_center(save_lbl);
-
-    s_cfg_status_lbl = lv_label_create(tile);
-    lv_label_set_text(s_cfg_status_lbl, "Listo para configurar red");
-    lv_obj_set_width(s_cfg_status_lbl, 154);
-    lv_obj_set_style_text_align(s_cfg_status_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(s_cfg_status_lbl, lv_color_hex(0x00AA44), 0);
-    lv_obj_align(s_cfg_status_lbl, LV_ALIGN_TOP_MID, 0, 188);
-
-    s_cfg_kb = lv_keyboard_create(tile);
-    lv_obj_set_size(s_cfg_kb, 170, 112);
-    lv_obj_align(s_cfg_kb, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_add_flag(s_cfg_kb, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_event_cb(s_cfg_kb, cfg_keyboard_event_cb, LV_EVENT_READY, NULL);
-    lv_obj_add_event_cb(s_cfg_kb, cfg_keyboard_event_cb, LV_EVENT_CANCEL, NULL);
+    s_cb_status_lbl[idx] = lv_label_create(tile);
+    lv_label_set_text(s_cb_status_lbl[idx], "Estado: INACTIVO");
+    lv_obj_set_style_text_color(s_cb_status_lbl[idx], lv_color_hex(0x00AA44), 0);
+    lv_obj_align(s_cb_status_lbl[idx], LV_ALIGN_CENTER, 0, 26);
 }
 
 static uint8_t accel_to_quadrant(int16_t ax, int16_t ay, bool valid)
@@ -436,34 +364,9 @@ void ui_clock_create(void)
         lv_obj_set_size(s_tiles[i], lv_pct(100), lv_pct(100));
     }
 
-    /* Pantalla 1: Reloj adaptado a 170x320 */
-    lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000000), 0);
-    lv_obj_set_style_border_width(s_tiles[0], 0, 0);
-
-    s_brand_lbl = lv_label_create(s_tiles[0]);
-    lv_label_set_text(s_brand_lbl, "wichIA");
-    lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
-    lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x00cc44), 0);
-    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
-
-    s_time_lbl = lv_label_create(s_tiles[0]);
-    lv_label_set_text(s_time_lbl, "--:--:--");
-    lv_obj_set_style_text_font(s_time_lbl, CLOCK_FONT, 0);
-    lv_obj_set_style_text_align(s_time_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_width(s_time_lbl, lv_pct(98));
-    lv_obj_set_style_pad_left(s_time_lbl, 2, 0);
-    lv_obj_set_style_pad_right(s_time_lbl, 2, 0);
-    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
-
-    lv_obj_t *hint = lv_label_create(s_tiles[0]);
-    lv_label_set_text(hint, "Desliza para ver pantallas 2-5");
-    lv_obj_set_style_text_color(hint, lv_color_hex(0x007722), 0);
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -8);
-
-    create_info_tile(s_tiles[1], "Pantalla 2", "Estado sensores", "(maqueta touch)");
-    create_wifi_config_tile(s_tiles[2]);
-    create_info_tile(s_tiles[3], "Pantalla 4", "Estado reloj", "(maqueta touch)");
-    create_info_tile(s_tiles[4], "Pantalla 5", "Debug", "(maqueta touch)");
+    for (uint8_t i = 0; i < 5; i++) {
+        create_checkbox_tile(s_tiles[i], i);
+    }
 
     set_active_tile(0, LV_ANIM_OFF);
 
@@ -493,7 +396,6 @@ void ui_clock_create(void)
     lv_obj_align(s_touch_y_lbl, LV_ALIGN_TOP_LEFT, 52, 3);
 #endif
 
-    lv_timer_create(clock_timer_cb, 200, NULL);
 }
 
 
@@ -571,29 +473,13 @@ void ui_clock_set_wifi_scan_callback(ui_wifi_scan_cb_t cb)
 
 void ui_clock_set_scan_results(const char *options_newline)
 {
-    if (!s_cfg_networks_dd) {
-        ESP_LOGW(TAG_UI, "UI WiFi aun no inicializada");
-        return;
-    }
-
-    if (options_newline && options_newline[0] != '\0') {
-        lv_dropdown_set_options(s_cfg_networks_dd, options_newline);
-        cfg_set_status("Redes actualizadas", lv_color_hex(0x66FF66));
-    } else {
-        lv_dropdown_set_options(s_cfg_networks_dd, "(sin resultados)");
-        cfg_set_status("No se encontraron redes", lv_color_hex(0xFFAA33));
-    }
-    ESP_LOGI(TAG_UI, "Scan results actualizados en UI");
+    (void)options_newline;
+    ESP_LOGI(TAG_UI, "WiFi UI deshabilitada en modo 5 checkboxes");
 }
 
 void ui_clock_prefill_wifi(const char *ssid, const char *pass)
 {
-    if (s_cfg_ssid_ta && ssid) {
-        lv_textarea_set_text(s_cfg_ssid_ta, ssid);
-    }
-    if (s_cfg_pass_ta && pass) {
-        lv_textarea_set_text(s_cfg_pass_ta, pass);
-    }
-    cfg_set_status("Datos WiFi cargados", lv_color_hex(0x66FF66));
-    ESP_LOGI(TAG_UI, "Prefill WiFi aplicado en UI");
+    (void)ssid;
+    (void)pass;
+    ESP_LOGI(TAG_UI, "WiFi UI deshabilitada en modo 5 checkboxes");
 }
