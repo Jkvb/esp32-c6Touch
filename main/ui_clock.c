@@ -38,6 +38,7 @@ static uint8_t s_rot_stable_count = 0;
 #define UI_TOUCH_DBG_W 170
 #define UI_TOUCH_DBG_H 320
 
+#if UI_TOUCH_DEBUG_OVERLAY
 static lv_obj_t *s_touch_cross_h = NULL;
 static lv_obj_t *s_touch_cross_v = NULL;
 static lv_obj_t *s_touch_x_lbl = NULL;
@@ -45,6 +46,7 @@ static lv_obj_t *s_touch_y_lbl = NULL;
 static int16_t s_touch_dbg_last_x = -1;
 static int16_t s_touch_dbg_last_y = -1;
 static uint32_t s_touch_dbg_update_count = 0;
+#endif
 static uint32_t s_touch_diag_move_samples = 0;
 static bool s_touch_diag_prev_pressed = false;
 static int16_t s_touch_diag_last_x = -32768;
@@ -78,28 +80,6 @@ static void tile_changed_cb(lv_event_t *e)
     s_active_tile = tile_index_from_obj(act);
     if (UI_TOUCH_LOG_ENABLE) ESP_LOGI(TAG_UI, "Pantalla activa=%d (touch swipe)", s_active_tile + 1);
 }
-
-static void tileview_gesture_cb(lv_event_t *e)
-{
-    (void)e;
-    lv_indev_t *indev = lv_indev_active();
-    if (!indev) return;
-
-    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
-    uint8_t next = s_active_tile;
-
-    if (dir == LV_DIR_LEFT && s_active_tile < 5) {
-        next = s_active_tile + 1;
-    } else if (dir == LV_DIR_RIGHT && s_active_tile > 0) {
-        next = s_active_tile - 1;
-    }
-
-    if (next != s_active_tile) {
-        set_active_tile(next, LV_ANIM_ON);
-        if (UI_TOUCH_LOG_ENABLE) ESP_LOGI(TAG_UI, "Swipe lateral: pantalla=%d", next + 1);
-    }
-}
-
 
 static const char *touch_dir_to_str(lv_dir_t dir)
 {
@@ -306,28 +286,6 @@ static void clock_timer_cb(lv_timer_t *t)
     lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
 
     update_clock_rotation_from_accel();
-}
-
-static void create_info_tile(lv_obj_t *tile, const char *title, const char *line1, const char *line2)
-{
-    lv_obj_set_style_bg_color(tile, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(tile, 0, 0);
-
-    lv_obj_t *ttl = lv_label_create(tile);
-    lv_label_set_text(ttl, title);
-    lv_obj_set_style_text_color(ttl, lv_color_hex(0x00ff66), 0);
-    lv_obj_align(ttl, LV_ALIGN_TOP_MID, 0, 14);
-
-    lv_obj_t *l1 = lv_label_create(tile);
-    lv_label_set_text(l1, line1);
-    lv_obj_set_style_text_color(l1, lv_color_hex(0x00cc44), 0);
-    lv_obj_align(l1, LV_ALIGN_CENTER, 0, -10);
-
-    lv_obj_t *l2 = lv_label_create(tile);
-    lv_label_set_text(l2, line2);
-    lv_obj_set_style_text_color(l2, lv_color_hex(0x00aa33), 0);
-    lv_obj_align(l2, LV_ALIGN_CENTER, 0, 16);
 }
 
 void ui_clock_create(void)
