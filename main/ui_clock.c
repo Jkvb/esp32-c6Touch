@@ -21,7 +21,7 @@
 static const char *TAG_UI = "UI_CLOCK";
 
 static lv_obj_t *s_tileview = NULL;
-static lv_obj_t *s_tiles[5] = {0};
+static lv_obj_t *s_tiles[6] = {0};
 static lv_obj_t *s_brand_lbl = NULL;
 static lv_obj_t *s_time_lbl = NULL;
 
@@ -57,7 +57,7 @@ static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
 
 static uint8_t tile_index_from_obj(lv_obj_t *obj)
 {
-    for (uint8_t i = 0; i < 5; i++) {
+    for (uint8_t i = 0; i < 6; i++) {
         if (obj == s_tiles[i]) return i;
     }
     return 0;
@@ -66,7 +66,7 @@ static uint8_t tile_index_from_obj(lv_obj_t *obj)
 static void set_active_tile(uint8_t idx, lv_anim_enable_t anim)
 {
     if (!s_tileview) return;
-    if (idx > 4) idx = 4;
+    if (idx > 5) idx = 5;
     s_active_tile = idx;
     lv_tileview_set_tile_by_index(s_tileview, idx, 0, anim);
 }
@@ -88,7 +88,7 @@ static void tileview_gesture_cb(lv_event_t *e)
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
     uint8_t next = s_active_tile;
 
-    if (dir == LV_DIR_LEFT && s_active_tile < 4) {
+    if (dir == LV_DIR_LEFT && s_active_tile < 5) {
         next = s_active_tile + 1;
     } else if (dir == LV_DIR_RIGHT && s_active_tile > 0) {
         next = s_active_tile - 1;
@@ -333,7 +333,7 @@ static void create_info_tile(lv_obj_t *tile, const char *title, const char *line
 void ui_clock_create(void)
 {
     lv_obj_t *scr = lv_screen_active();
-    ESP_LOGI(TAG_UI, "ui_clock_create init (modo 5 pantallas)");
+    ESP_LOGI(TAG_UI, "ui_clock_create init (modo 6 pantallas)");
     ESP_LOGI(TAG_UI, "Swipe lateral habilitado (pantallas fijas)");
 
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
@@ -356,19 +356,39 @@ void ui_clock_create(void)
     lv_obj_add_event_cb(s_tileview, tileview_touch_diag_cb, LV_EVENT_RELEASED, NULL);
     lv_obj_add_event_cb(s_tileview, tileview_touch_diag_cb, LV_EVENT_GESTURE, NULL);
 
-    ESP_LOGI(TAG_UI, "TileView fijo con 5 pantallas (1..5)");
+    ESP_LOGI(TAG_UI, "TileView fijo con 6 pantallas (1..6)");
 
-    for (uint8_t i = 0; i < 5; i++) {
+    for (uint8_t i = 0; i < 6; i++) {
         s_tiles[i] = lv_tileview_add_tile(s_tileview, i, 0, LV_DIR_HOR);
         lv_obj_clear_flag(s_tiles[i], LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_size(s_tiles[i], lv_pct(100), lv_pct(100));
     }
 
-    for (uint8_t i = 0; i < 5; i++) {
-        create_checkbox_tile(s_tiles[i], i);
+    /* Pantalla 1: Reloj */
+    lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000000), 0);
+    lv_obj_set_style_border_width(s_tiles[0], 0, 0);
+
+    s_brand_lbl = lv_label_create(s_tiles[0]);
+    lv_label_set_text(s_brand_lbl, "wichIA");
+    lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
+    lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x00cc44), 0);
+    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
+
+    s_time_lbl = lv_label_create(s_tiles[0]);
+    lv_label_set_text(s_time_lbl, "--:--:--");
+    lv_obj_set_style_text_font(s_time_lbl, CLOCK_FONT, 0);
+    lv_obj_set_style_text_align(s_time_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(s_time_lbl, lv_pct(98));
+    lv_obj_set_style_pad_left(s_time_lbl, 2, 0);
+    lv_obj_set_style_pad_right(s_time_lbl, 2, 0);
+    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
+
+    for (uint8_t i = 1; i < 6; i++) {
+        create_checkbox_tile(s_tiles[i], (uint8_t)(i - 1));
     }
 
     set_active_tile(0, LV_ANIM_OFF);
+    lv_timer_create(clock_timer_cb, 200, NULL);
 
 #if UI_TOUCH_DEBUG_OVERLAY
     s_touch_cross_h = lv_obj_create(scr);
@@ -474,12 +494,12 @@ void ui_clock_set_wifi_scan_callback(ui_wifi_scan_cb_t cb)
 void ui_clock_set_scan_results(const char *options_newline)
 {
     (void)options_newline;
-    ESP_LOGI(TAG_UI, "WiFi UI deshabilitada en modo 5 checkboxes");
+    ESP_LOGI(TAG_UI, "WiFi UI deshabilitada en modo reloj+5 checkboxes");
 }
 
 void ui_clock_prefill_wifi(const char *ssid, const char *pass)
 {
     (void)ssid;
     (void)pass;
-    ESP_LOGI(TAG_UI, "WiFi UI deshabilitada en modo 5 checkboxes");
+    ESP_LOGI(TAG_UI, "WiFi UI deshabilitada en modo reloj+5 checkboxes");
 }
