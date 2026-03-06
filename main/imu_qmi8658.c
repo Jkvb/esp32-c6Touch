@@ -41,8 +41,13 @@ static esp_err_t i2c_init_once(void)
     };
     ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &conf));
     esp_err_t r = i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0);
-    if (r != ESP_OK && r != ESP_ERR_INVALID_STATE) {
-        ESP_ERROR_CHECK(r);
+    if (r == ESP_OK) {
+        ESP_LOGI(TAG, "I2C driver instalado para IMU");
+    } else if (r == ESP_ERR_INVALID_STATE || r == ESP_FAIL) {
+        ESP_LOGW(TAG, "I2C ya inicializado por otro modulo (r=0x%x), continuo", (unsigned)r);
+    } else {
+        ESP_LOGE(TAG, "i2c_driver_install fallo (r=0x%x)", (unsigned)r);
+        return r;
     }
     inited = true;
     return ESP_OK;
