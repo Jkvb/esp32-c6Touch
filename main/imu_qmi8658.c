@@ -102,7 +102,16 @@ esp_err_t imu_qmi8658_read_accel(imu_accel_t *out)
     if (!s_addr) return ESP_ERR_INVALID_STATE;
 
     uint8_t b[6];
-    ESP_ERROR_CHECK(rd(s_addr, REG_AX_L, b, sizeof(b)));
+    esp_err_t r = rd(s_addr, REG_AX_L, b, sizeof(b));
+    if (r != ESP_OK) {
+        static uint32_t s_rd_err_cnt = 0;
+        s_rd_err_cnt++;
+        if ((s_rd_err_cnt % 10U) == 1U) {
+            ESP_LOGW(TAG, "imu_qmi8658_read_accel timeout/error (r=0x%x, cnt=%lu)",
+                     (unsigned)r, (unsigned long)s_rd_err_cnt);
+        }
+        return r;
+    }
 
     int16_t rx = (int16_t)((b[1] << 8) | b[0]);
     int16_t ry = (int16_t)((b[3] << 8) | b[2]);

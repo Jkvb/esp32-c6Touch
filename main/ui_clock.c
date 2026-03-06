@@ -34,6 +34,7 @@ static uint8_t s_last_rot_quadrant = 0;
 static uint8_t s_rot_candidate = 0;
 static uint8_t s_rot_stable_count = 0;
 #define UI_TOUCH_DEBUG_OVERLAY 0
+#define UI_TOUCH_LOG_ENABLE 0
 #define UI_TOUCH_DBG_W 170
 #define UI_TOUCH_DBG_H 320
 
@@ -81,7 +82,7 @@ static void tile_changed_cb(lv_event_t *e)
     lv_obj_t *tv = lv_event_get_target(e);
     lv_obj_t *act = lv_tileview_get_tile_act(tv);
     s_active_tile = tile_index_from_obj(act);
-    ESP_LOGI(TAG_UI, "Pantalla activa=%d (touch swipe)", s_active_tile + 1);
+    if (UI_TOUCH_LOG_ENABLE) ESP_LOGI(TAG_UI, "Pantalla activa=%d (touch swipe)", s_active_tile + 1);
 }
 
 static void tileview_gesture_cb(lv_event_t *e)
@@ -101,7 +102,7 @@ static void tileview_gesture_cb(lv_event_t *e)
 
     if (next != s_active_tile) {
         set_active_tile(next, LV_ANIM_ON);
-        ESP_LOGI(TAG_UI, "Swipe lateral: pantalla=%d", next + 1);
+        if (UI_TOUCH_LOG_ENABLE) ESP_LOGI(TAG_UI, "Swipe lateral: pantalla=%d", next + 1);
     }
 }
 
@@ -130,24 +131,24 @@ static void tileview_touch_diag_cb(lv_event_t *e)
         s_touch_diag_prev_pressed = true;
         s_touch_diag_last_x = p.x;
         s_touch_diag_last_y = p.y;
-        ESP_LOGI(TAG_UI, "TOUCH PRESSED x=%d y=%d", (int)p.x, (int)p.y);
+        if (UI_TOUCH_LOG_ENABLE) ESP_LOGI(TAG_UI, "TOUCH PRESSED x=%d y=%d", (int)p.x, (int)p.y);
     } else if (code == LV_EVENT_PRESSING) {
         if (p.x != s_touch_diag_last_x || p.y != s_touch_diag_last_y) {
             s_touch_diag_last_x = p.x;
             s_touch_diag_last_y = p.y;
             s_touch_diag_move_samples++;
             if ((s_touch_diag_move_samples % 8U) == 0U) {
-                ESP_LOGI(TAG_UI, "TOUCH MOVE x=%d y=%d", (int)p.x, (int)p.y);
+                if (UI_TOUCH_LOG_ENABLE) ESP_LOGI(TAG_UI, "TOUCH MOVE x=%d y=%d", (int)p.x, (int)p.y);
             }
         }
     } else if (code == LV_EVENT_RELEASED) {
         if (s_touch_diag_prev_pressed) {
-            ESP_LOGI(TAG_UI, "TOUCH RELEASED x=%d y=%d", (int)p.x, (int)p.y);
+            if (UI_TOUCH_LOG_ENABLE) ESP_LOGI(TAG_UI, "TOUCH RELEASED x=%d y=%d", (int)p.x, (int)p.y);
         }
         s_touch_diag_prev_pressed = false;
     } else if (code == LV_EVENT_GESTURE) {
         lv_dir_t dir = indev ? lv_indev_get_gesture_dir(indev) : LV_DIR_NONE;
-        ESP_LOGI(TAG_UI, "TOUCH GESTURE dir=%s x=%d y=%d", touch_dir_to_str(dir), (int)p.x, (int)p.y);
+        if (UI_TOUCH_LOG_ENABLE) ESP_LOGI(TAG_UI, "TOUCH GESTURE dir=%s x=%d y=%d", touch_dir_to_str(dir), (int)p.x, (int)p.y);
     }
 }
 
@@ -422,11 +423,12 @@ void ui_clock_create(void)
     lv_obj_clear_flag(s_tileview, LV_OBJ_FLAG_SCROLL_ELASTIC);
     lv_obj_clear_flag(s_tileview, LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_add_flag(s_tileview, LV_OBJ_FLAG_GESTURE_BUBBLE);
-    lv_obj_add_event_cb(s_tileview, tileview_gesture_cb, LV_EVENT_GESTURE, NULL);
     lv_obj_add_event_cb(s_tileview, tileview_touch_diag_cb, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(s_tileview, tileview_touch_diag_cb, LV_EVENT_PRESSING, NULL);
     lv_obj_add_event_cb(s_tileview, tileview_touch_diag_cb, LV_EVENT_RELEASED, NULL);
     lv_obj_add_event_cb(s_tileview, tileview_touch_diag_cb, LV_EVENT_GESTURE, NULL);
+
+    ESP_LOGI(TAG_UI, "TileView fijo con 5 pantallas (1..5)");
 
     for (uint8_t i = 0; i < 5; i++) {
         s_tiles[i] = lv_tileview_add_tile(s_tileview, i, 0, LV_DIR_HOR);
@@ -503,11 +505,11 @@ void ui_clock_set_touch_debug(int16_t x, int16_t y, bool pressed)
             s_touch_diag_last_y = y;
             s_touch_diag_move_samples++;
             if ((s_touch_diag_move_samples % 10U) == 0U) {
-                ESP_LOGI(TAG_UI, "TOUCH RAW x=%d y=%d pressed=1", (int)x, (int)y);
+                if (UI_TOUCH_LOG_ENABLE) ESP_LOGI(TAG_UI, "TOUCH RAW x=%d y=%d pressed=1", (int)x, (int)y);
             }
         }
     } else if (s_touch_diag_prev_pressed) {
-        ESP_LOGI(TAG_UI, "TOUCH RAW release");
+        if (UI_TOUCH_LOG_ENABLE) ESP_LOGI(TAG_UI, "TOUCH RAW release");
     }
     s_touch_diag_prev_pressed = pressed;
 #if UI_TOUCH_DEBUG_OVERLAY

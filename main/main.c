@@ -59,8 +59,10 @@ static void imu_task(void *arg)
                 ESP_LOGI(TAG, "ROT detectada=%d (ax=%.2f ay=%.2f az=%.2f) [auto-rot desactivada]",
                          (int)cur, a.ax, a.ay, a.az);
             }
+            vTaskDelay(pdMS_TO_TICKS(100));
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(250));
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -74,7 +76,7 @@ void app_main(void)
 
     ui_clock_create();
 
-    xTaskCreate(lvgl_task, "lvgl", 4096, NULL, 5, NULL);
+    xTaskCreate(lvgl_task, "lvgl", 8192, NULL, 5, NULL);
     xTaskCreate(imu_task,  "imu",  3072, NULL, 4, NULL);
 
     ESP_LOGI(TAG, "OK: reloj + touch + pantalla fija (WiFi después).");
