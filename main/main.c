@@ -56,8 +56,8 @@ static void imu_task(void *arg)
 
             if (stable >= 3 && cand != cur) {
                 cur = cand;
-                ESP_LOGI(TAG, "ROT -> %d (ax=%.2f ay=%.2f az=%.2f)", (int)cur, a.ax, a.ay, a.az);
-                display_st7789_set_rotation(cur);
+                ESP_LOGI(TAG, "ROT detectada=%d (ax=%.2f ay=%.2f az=%.2f) [auto-rot desactivada]",
+                         (int)cur, a.ax, a.ay, a.az);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -69,10 +69,13 @@ void app_main(void)
     lv_display_t *d = display_st7789_lvgl_init();
     if (!d) return;
 
+    /* Pantalla fija volteada para evitar conflictos de rotación dinámica */
+    display_st7789_set_rotation(DISP_ROT_180);
+
     ui_clock_create();
 
     xTaskCreate(lvgl_task, "lvgl", 4096, NULL, 5, NULL);
-    xTaskCreate(imu_task,  "imu",  4096, NULL, 5, NULL);
+    xTaskCreate(imu_task,  "imu",  3072, NULL, 4, NULL);
 
-    ESP_LOGI(TAG, "OK: reloj + rotación (WiFi después).");
+    ESP_LOGI(TAG, "OK: reloj + touch + pantalla fija (WiFi después).");
 }
