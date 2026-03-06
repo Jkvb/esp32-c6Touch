@@ -136,6 +136,32 @@ static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
     int16_t x = (int16_t)(((p[2] & 0x0F) << 8) | p[3]);
     int16_t y = (int16_t)(((p[4] & 0x0F) << 8) | p[5]);
 
+    /* Ajuste de touch según la rotación activa del display */
+    disp_rot_t rot = display_st7789_get_rotation();
+    int16_t tx = x;
+    int16_t ty = y;
+
+    switch (rot) {
+        case DISP_ROT_90:
+            tx = (int16_t)(LCD_H_RES - 1 - y);
+            ty = x;
+            break;
+        case DISP_ROT_180:
+            tx = (int16_t)(LCD_H_RES - 1 - x);
+            ty = (int16_t)(LCD_V_RES - 1 - y);
+            break;
+        case DISP_ROT_270:
+            tx = y;
+            ty = (int16_t)(LCD_V_RES - 1 - x);
+            break;
+        case DISP_ROT_0:
+        default:
+            break;
+    }
+
+    x = tx;
+    y = ty;
+
     if (x < 0) x = 0;
     if (y < 0) y = 0;
     if (x > (LCD_H_RES - 1)) x = (LCD_H_RES - 1);
