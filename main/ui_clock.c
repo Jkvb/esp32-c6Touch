@@ -44,6 +44,11 @@ static lv_obj_t *s_touch_y_lbl = NULL;
 static int16_t s_touch_dbg_last_x = -1;
 static int16_t s_touch_dbg_last_y = -1;
 static uint32_t s_touch_dbg_update_count = 0;
+static uint32_t s_touch_diag_move_samples = 0;
+static bool s_touch_diag_prev_pressed = false;
+static int16_t s_touch_diag_last_x = -32768;
+static int16_t s_touch_diag_last_y = -32768;
+
 
 static ui_wifi_save_cb_t s_wifi_cb = NULL;
 static ui_wifi_scan_cb_t s_wifi_scan_cb = NULL;
@@ -97,6 +102,52 @@ static void tileview_gesture_cb(lv_event_t *e)
     if (next != s_active_tile) {
         set_active_tile(next, LV_ANIM_ON);
         ESP_LOGI(TAG_UI, "Swipe lateral: pantalla=%d", next + 1);
+    }
+}
+
+
+static const char *touch_dir_to_str(lv_dir_t dir)
+{
+    switch (dir) {
+        case LV_DIR_LEFT: return "LEFT";
+        case LV_DIR_RIGHT: return "RIGHT";
+        case LV_DIR_TOP: return "TOP";
+        case LV_DIR_BOTTOM: return "BOTTOM";
+        default: return "NONE";
+    }
+}
+
+static void tileview_touch_diag_cb(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    lv_indev_t *indev = lv_indev_active();
+    lv_point_t p = {.x = -1, .y = -1};
+    if (indev) {
+        lv_indev_get_point(indev, &p);
+    }
+
+    if (code == LV_EVENT_PRESSED) {
+        s_touch_diag_prev_pressed = true;
+        s_touch_diag_last_x = p.x;
+        s_touch_diag_last_y = p.y;
+        ESP_LOGI(TAG_UI, "TOUCH PRESSED x=%d y=%d", (int)p.x, (int)p.y);
+    } else if (code == LV_EVENT_PRESSING) {
+        if (p.x != s_touch_diag_last_x || p.y != s_touch_diag_last_y) {
+            s_touch_diag_last_x = p.x;
+            s_touch_diag_last_y = p.y;
+            s_touch_diag_move_samples++;
+            if ((s_touch_diag_move_samples % 8U) == 0U) {
+                ESP_LOGI(TAG_UI, "TOUCH MOVE x=%d y=%d", (int)p.x, (int)p.y);
+            }
+        }
+    } else if (code == LV_EVENT_RELEASED) {
+        if (s_touch_diag_prev_pressed) {
+            ESP_LOGI(TAG_UI, "TOUCH RELEASED x=%d y=%d", (int)p.x, (int)p.y);
+        }
+        s_touch_diag_prev_pressed = false;
+    } else if (code == LV_EVENT_GESTURE) {
+        lv_dir_t dir = indev ? lv_indev_get_gesture_dir(indev) : LV_DIR_NONE;
+        ESP_LOGI(TAG_UI, "TOUCH GESTURE dir=%s x=%d y=%d", touch_dir_to_str(dir), (int)p.x, (int)p.y);
     }
 }
 
@@ -372,6 +423,10 @@ void ui_clock_create(void)
     lv_obj_clear_flag(s_tileview, LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_add_flag(s_tileview, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(s_tileview, tileview_gesture_cb, LV_EVENT_GESTURE, NULL);
+    lv_obj_add_event_cb(s_tileview, tileview_touch_diag_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(s_tileview, tileview_touch_diag_cb, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(s_tileview, tileview_touch_diag_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(s_tileview, tileview_touch_diag_cb, LV_EVENT_GESTURE, NULL);
 
     for (uint8_t i = 0; i < 5; i++) {
         s_tiles[i] = lv_tileview_add_tile(s_tileview, i, 0, LV_DIR_HOR);
@@ -442,6 +497,19 @@ void ui_clock_create(void)
 
 void ui_clock_set_touch_debug(int16_t x, int16_t y, bool pressed)
 {
+    if (pressed) {
+        if (x != s_touch_diag_last_x || y != s_touch_diag_last_y) {
+            s_touch_diag_last_x = x;
+            s_touch_diag_last_y = y;
+            s_touch_diag_move_samples++;
+            if ((s_touch_diag_move_samples % 10U) == 0U) {
+                ESP_LOGI(TAG_UI, "TOUCH RAW x=%d y=%d pressed=1", (int)x, (int)y);
+            }
+        }
+    } else if (s_touch_diag_prev_pressed) {
+        ESP_LOGI(TAG_UI, "TOUCH RAW release");
+    }
+    s_touch_diag_prev_pressed = pressed;
 #if UI_TOUCH_DEBUG_OVERLAY
     if (!s_touch_cross_h || !s_touch_cross_v || !s_touch_x_lbl || !s_touch_y_lbl) {
         return;
