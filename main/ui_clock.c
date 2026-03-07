@@ -283,7 +283,7 @@ static void clock_timer_cb(lv_timer_t *t)
         snprintf(date_buf, sizeof(date_buf), "--/--/----");
     } else {
         snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
-        snprintf(date_buf, sizeof(date_buf), "%02d/%02d/%04d", ti.tm_mday, ti.tm_mon + 1, ti.tm_year + 1900);
+        strftime(date_buf, sizeof(date_buf), "%d/%m/%Y", &ti);
     }
     lv_label_set_text(s_time_lbl, time_buf);
     if (s_date_lbl) lv_label_set_text(s_date_lbl, date_buf);
