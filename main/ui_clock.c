@@ -22,8 +22,8 @@ static const char *TAG_UI = "UI_CLOCK";
 
 #define UI_COLOR_BG        0x000000
 #define UI_COLOR_BG_DARK   0x000000
-#define UI_COLOR_TEXT_MAIN 0x00FF66
-#define UI_COLOR_TEXT_SUB  0x00CC44
+#define UI_COLOR_TEXT_MAIN 0x39FF14
+#define UI_COLOR_TEXT_SUB  0x1ED760
 
 static lv_obj_t *s_tileview = NULL;
 static lv_obj_t *s_tiles[6] = {0};

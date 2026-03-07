@@ -257,9 +257,8 @@ lv_display_t* display_st7789_lvgl_init(void)
     ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
 
     ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel_handle, LCD_X_GAP, LCD_Y_GAP));
-#if LCD_INVERT_COLOR
+    /* Forzar colores reales: negro=negro, blanco=blanco */
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_handle, false));
-#endif
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
 
     /* LVGL */
