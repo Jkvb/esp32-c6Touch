@@ -20,10 +20,10 @@
 
 static const char *TAG_UI = "UI_CLOCK";
 
-#define UI_COLOR_BG        0x00140A
-#define UI_COLOR_BG_DARK   0x000D06
+#define UI_COLOR_BG        0x000000
+#define UI_COLOR_BG_DARK   0x000000
 #define UI_COLOR_TEXT_MAIN 0x00FF66
-#define UI_COLOR_TEXT_SUB  0x00BB55
+#define UI_COLOR_TEXT_SUB  0x00CC44
 
 static lv_obj_t *s_tileview = NULL;
 static lv_obj_t *s_tiles[6] = {0};
@@ -155,6 +155,7 @@ static void style_checkbox_variant(lv_obj_t *cb, uint8_t style_id)
     lv_obj_set_style_bg_color(cb, lv_color_hex(UI_COLOR_BG_DARK), LV_PART_INDICATOR);
     lv_obj_set_style_border_color(cb, lv_color_hex(UI_COLOR_TEXT_SUB), LV_PART_INDICATOR);
     lv_obj_set_style_border_width(cb, 2, LV_PART_INDICATOR);
+    lv_obj_set_style_shadow_width(cb, 0, LV_PART_INDICATOR);
 
     switch (style_id) {
         case 0:
@@ -169,8 +170,7 @@ static void style_checkbox_variant(lv_obj_t *cb, uint8_t style_id)
             lv_obj_set_style_bg_color(cb, lv_color_hex(0x00CC55), LV_PART_INDICATOR | LV_STATE_CHECKED);
             break;
         case 3:
-            lv_obj_set_style_shadow_width(cb, 8, LV_PART_INDICATOR | LV_STATE_CHECKED);
-            lv_obj_set_style_shadow_color(cb, lv_color_hex(0x00CC66), LV_PART_INDICATOR | LV_STATE_CHECKED);
+            lv_obj_set_style_shadow_width(cb, 0, LV_PART_INDICATOR | LV_STATE_CHECKED);
             lv_obj_set_style_bg_color(cb, lv_color_hex(0x00AA55), LV_PART_INDICATOR | LV_STATE_CHECKED);
             break;
         case 4:
