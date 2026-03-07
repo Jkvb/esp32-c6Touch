@@ -24,6 +24,7 @@ static lv_obj_t *s_tileview = NULL;
 static lv_obj_t *s_tiles[6] = {0};
 static lv_obj_t *s_brand_lbl = NULL;
 static lv_obj_t *s_time_lbl = NULL;
+static lv_obj_t *s_date_lbl = NULL;
 
 static volatile int16_t s_ax = 0;
 static volatile int16_t s_ay = 0;
@@ -257,6 +258,12 @@ static void update_clock_rotation_from_accel(void)
     lv_obj_set_style_transform_pivot_y(s_brand_lbl, 10, 0);
     lv_obj_set_style_transform_rotation(s_brand_lbl, deg10, 0);
 
+    if (s_date_lbl) {
+        lv_obj_set_style_transform_pivot_x(s_date_lbl, lv_obj_get_width(s_date_lbl) / 2, 0);
+        lv_obj_set_style_transform_pivot_y(s_date_lbl, 8, 0);
+        lv_obj_set_style_transform_rotation(s_date_lbl, deg10, 0);
+    }
+
     ESP_LOGI(TAG_UI, "Rotación reloj=%d° (ax=%d ay=%d)", (int)(deg10 / 10), (int)s_ax, (int)s_ay);
 }
 
@@ -269,21 +276,27 @@ static void clock_timer_cb(lv_timer_t *t)
     time(&now);
     localtime_r(&now, &ti);
 
-    char buf[16];
+    char time_buf[16];
+    char date_buf[24];
     if (ti.tm_year < (2024 - 1900)) {
-        snprintf(buf, sizeof(buf), "--:--:--");
+        snprintf(time_buf, sizeof(time_buf), "--:--:--");
+        snprintf(date_buf, sizeof(date_buf), "--/--/----");
     } else {
-        snprintf(buf, sizeof(buf), "%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
+        snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
+        snprintf(date_buf, sizeof(date_buf), "%02d/%02d/%04d", ti.tm_mday, ti.tm_mon + 1, ti.tm_year + 1900);
     }
-    lv_label_set_text(s_time_lbl, buf);
+    lv_label_set_text(s_time_lbl, time_buf);
+    if (s_date_lbl) lv_label_set_text(s_date_lbl, date_buf);
 
     uint8_t sec = (uint8_t)ti.tm_sec;
     uint8_t green = (uint8_t)(130 + (sec * 2) % 110);
     lv_obj_set_style_text_color(s_time_lbl, lv_color_make(20, green, 25), 0);
     lv_obj_set_style_text_color(s_brand_lbl, lv_color_make(20, (uint8_t)(green - 40), 20), 0);
+    if (s_date_lbl) lv_obj_set_style_text_color(s_date_lbl, lv_color_make(120, 220, 150), 0);
 
-    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
-    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
+    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -10);
+    if (s_date_lbl) lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 26);
+    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 16);
 
     update_clock_rotation_from_accel();
 }
@@ -323,23 +336,44 @@ void ui_clock_create(void)
     }
 
     /* Pantalla 1: Reloj */
-    lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x020a05), 0);
+    lv_obj_set_style_bg_grad_color(s_tiles[0], lv_color_hex(0x001a0a), 0);
+    lv_obj_set_style_bg_grad_dir(s_tiles[0], LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_border_width(s_tiles[0], 0, 0);
 
-    s_brand_lbl = lv_label_create(s_tiles[0]);
-    lv_label_set_text(s_brand_lbl, "wichIA");
-    lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
-    lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x00cc44), 0);
-    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
+    lv_obj_t *clock_card = lv_obj_create(s_tiles[0]);
+    lv_obj_set_size(clock_card, lv_pct(92), 190);
+    lv_obj_align(clock_card, LV_ALIGN_CENTER, 0, 8);
+    lv_obj_set_style_radius(clock_card, 18, 0);
+    lv_obj_set_style_border_width(clock_card, 2, 0);
+    lv_obj_set_style_border_color(clock_card, lv_color_hex(0x00AA44), 0);
+    lv_obj_set_style_bg_color(clock_card, lv_color_hex(0x001108), 0);
+    lv_obj_set_style_bg_opa(clock_card, LV_OPA_80, 0);
+    lv_obj_set_style_shadow_width(clock_card, 16, 0);
+    lv_obj_set_style_shadow_color(clock_card, lv_color_hex(0x003311), 0);
+    lv_obj_set_style_shadow_opa(clock_card, LV_OPA_60, 0);
+    lv_obj_clear_flag(clock_card, LV_OBJ_FLAG_SCROLLABLE);
 
-    s_time_lbl = lv_label_create(s_tiles[0]);
+    s_brand_lbl = lv_label_create(clock_card);
+    lv_label_set_text(s_brand_lbl, "wichIA");
+    lv_obj_set_style_text_letter_space(s_brand_lbl, 3, 0);
+    lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x00cc44), 0);
+    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 16);
+
+    s_time_lbl = lv_label_create(clock_card);
     lv_label_set_text(s_time_lbl, "--:--:--");
     lv_obj_set_style_text_font(s_time_lbl, CLOCK_FONT, 0);
     lv_obj_set_style_text_align(s_time_lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(s_time_lbl, lv_pct(98));
     lv_obj_set_style_pad_left(s_time_lbl, 2, 0);
     lv_obj_set_style_pad_right(s_time_lbl, 2, 0);
-    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, 6);
+    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -10);
+
+    s_date_lbl = lv_label_create(clock_card);
+    lv_label_set_text(s_date_lbl, "--/--/----");
+    lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x78dd99), 0);
+    lv_obj_set_style_text_letter_space(s_date_lbl, 1, 0);
+    lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 26);
 
     for (uint8_t i = 1; i < 6; i++) {
         create_checkbox_tile(s_tiles[i], (uint8_t)(i - 1));
