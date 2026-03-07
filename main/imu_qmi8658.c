@@ -40,7 +40,15 @@ static esp_err_t i2c_init_once(void)
         .master.clk_speed = I2C_FREQ_HZ,
     };
     ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &conf));
-    ESP_ERROR_CHECK(i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0));
+    esp_err_t r = i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0);
+    if (r == ESP_OK) {
+        ESP_LOGI(TAG, "I2C driver instalado para IMU");
+    } else if (r == ESP_ERR_INVALID_STATE || r == ESP_FAIL) {
+        ESP_LOGW(TAG, "I2C ya inicializado por otro modulo (r=0x%x), continuo", (unsigned)r);
+    } else {
+        ESP_LOGE(TAG, "i2c_driver_install fallo (r=0x%x)", (unsigned)r);
+        return r;
+    }
     inited = true;
     return ESP_OK;
 }
@@ -94,7 +102,16 @@ esp_err_t imu_qmi8658_read_accel(imu_accel_t *out)
     if (!s_addr) return ESP_ERR_INVALID_STATE;
 
     uint8_t b[6];
-    ESP_ERROR_CHECK(rd(s_addr, REG_AX_L, b, sizeof(b)));
+    esp_err_t r = rd(s_addr, REG_AX_L, b, sizeof(b));
+    if (r != ESP_OK) {
+        static uint32_t s_rd_err_cnt = 0;
+        s_rd_err_cnt++;
+        if ((s_rd_err_cnt % 10U) == 1U) {
+            ESP_LOGW(TAG, "imu_qmi8658_read_accel timeout/error (r=0x%x, cnt=%lu)",
+                     (unsigned)r, (unsigned long)s_rd_err_cnt);
+        }
+        return r;
+    }
 
     int16_t rx = (int16_t)((b[1] << 8) | b[0]);
     int16_t ry = (int16_t)((b[3] << 8) | b[2]);
