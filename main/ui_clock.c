@@ -356,13 +356,15 @@ void ui_clock_create(void)
     lv_obj_set_width(s_time_lbl, lv_pct(98));
     lv_obj_set_style_pad_left(s_time_lbl, 2, 0);
     lv_obj_set_style_pad_right(s_time_lbl, 2, 0);
-    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -8);
+    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -24);
 
     s_date_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text(s_date_lbl, "--/--/----");
     lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(UI_COLOR_TEXT_SUB), 0);
     lv_obj_set_style_text_letter_space(s_date_lbl, 1, 0);
-    lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 26);
+    lv_obj_set_width(s_date_lbl, lv_pct(98));
+    lv_obj_set_style_text_align(s_date_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 46);
 
     for (uint8_t i = 1; i < 6; i++) {
         create_checkbox_tile(s_tiles[i], (uint8_t)(i - 1));
