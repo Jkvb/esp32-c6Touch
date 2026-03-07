@@ -150,10 +150,10 @@ static void style_checkbox_variant(lv_obj_t *cb, uint8_t style_id)
             lv_obj_set_style_text_color(cb, lv_color_hex(0x00FF66), 0);
             lv_obj_set_style_bg_color(cb, lv_color_hex(0x00AA44), LV_PART_INDICATOR | LV_STATE_CHECKED);
             break;
-        case 1: /* Azul sólido */
-            lv_obj_set_style_border_color(cb, lv_color_hex(0x33AAFF), LV_PART_INDICATOR);
-            lv_obj_set_style_bg_color(cb, lv_color_hex(0x0077CC), LV_PART_INDICATOR | LV_STATE_CHECKED);
-            lv_obj_set_style_text_color(cb, lv_color_hex(0x66CCFF), 0);
+        case 1: /* Verde sólido */
+            lv_obj_set_style_border_color(cb, lv_color_hex(0x22CC66), LV_PART_INDICATOR);
+            lv_obj_set_style_bg_color(cb, lv_color_hex(0x008833), LV_PART_INDICATOR | LV_STATE_CHECKED);
+            lv_obj_set_style_text_color(cb, lv_color_hex(0x66EE99), 0);
             break;
         case 2: /* Naranja redondo */
             lv_obj_set_style_radius(cb, 12, LV_PART_INDICATOR);
@@ -288,17 +288,7 @@ static void clock_timer_cb(lv_timer_t *t)
     lv_label_set_text(s_time_lbl, time_buf);
     if (s_date_lbl) lv_label_set_text(s_date_lbl, date_buf);
 
-    uint8_t sec = (uint8_t)ti.tm_sec;
-    uint8_t green = (uint8_t)(130 + (sec * 2) % 110);
-    lv_obj_set_style_text_color(s_time_lbl, lv_color_make(20, green, 25), 0);
-    lv_obj_set_style_text_color(s_brand_lbl, lv_color_make(20, (uint8_t)(green - 40), 20), 0);
-    if (s_date_lbl) lv_obj_set_style_text_color(s_date_lbl, lv_color_make(120, 220, 150), 0);
-
-    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -10);
-    if (s_date_lbl) lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 26);
-    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 16);
-
-    update_clock_rotation_from_accel();
+    /* Mantener callback liviano para evitar bloqueos de render */
 }
 
 void ui_clock_create(void)
@@ -335,43 +325,30 @@ void ui_clock_create(void)
         lv_obj_set_size(s_tiles[i], lv_pct(100), lv_pct(100));
     }
 
-    /* Pantalla 1: Reloj */
-    lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x020a05), 0);
-    lv_obj_set_style_bg_grad_color(s_tiles[0], lv_color_hex(0x001a0a), 0);
-    lv_obj_set_style_bg_grad_dir(s_tiles[0], LV_GRAD_DIR_VER, 0);
+    /* Pantalla 1: Reloj (fondo negro, letras verdes) */
+    lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(s_tiles[0], LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(s_tiles[0], 0, 0);
 
-    lv_obj_t *clock_card = lv_obj_create(s_tiles[0]);
-    lv_obj_set_size(clock_card, lv_pct(92), 190);
-    lv_obj_align(clock_card, LV_ALIGN_CENTER, 0, 8);
-    lv_obj_set_style_radius(clock_card, 18, 0);
-    lv_obj_set_style_border_width(clock_card, 2, 0);
-    lv_obj_set_style_border_color(clock_card, lv_color_hex(0x00AA44), 0);
-    lv_obj_set_style_bg_color(clock_card, lv_color_hex(0x001108), 0);
-    lv_obj_set_style_bg_opa(clock_card, LV_OPA_80, 0);
-    lv_obj_set_style_shadow_width(clock_card, 16, 0);
-    lv_obj_set_style_shadow_color(clock_card, lv_color_hex(0x003311), 0);
-    lv_obj_set_style_shadow_opa(clock_card, LV_OPA_60, 0);
-    lv_obj_clear_flag(clock_card, LV_OBJ_FLAG_SCROLLABLE);
-
-    s_brand_lbl = lv_label_create(clock_card);
+    s_brand_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text(s_brand_lbl, "wichIA");
-    lv_obj_set_style_text_letter_space(s_brand_lbl, 3, 0);
+    lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
     lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x00cc44), 0);
-    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 16);
+    lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
 
-    s_time_lbl = lv_label_create(clock_card);
+    s_time_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text(s_time_lbl, "--:--:--");
     lv_obj_set_style_text_font(s_time_lbl, CLOCK_FONT, 0);
     lv_obj_set_style_text_align(s_time_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x00ff66), 0);
     lv_obj_set_width(s_time_lbl, lv_pct(98));
     lv_obj_set_style_pad_left(s_time_lbl, 2, 0);
     lv_obj_set_style_pad_right(s_time_lbl, 2, 0);
-    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -10);
+    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -8);
 
-    s_date_lbl = lv_label_create(clock_card);
+    s_date_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text(s_date_lbl, "--/--/----");
-    lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x78dd99), 0);
+    lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x00AA44), 0);
     lv_obj_set_style_text_letter_space(s_date_lbl, 1, 0);
     lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 26);
 
@@ -380,7 +357,7 @@ void ui_clock_create(void)
     }
 
     set_active_tile(0, LV_ANIM_OFF);
-    lv_timer_create(clock_timer_cb, 200, NULL);
+    lv_timer_create(clock_timer_cb, 1000, NULL);
 
 #if UI_TOUCH_DEBUG_OVERLAY
     s_touch_cross_h = lv_obj_create(scr);
