@@ -247,7 +247,7 @@ static void update_clock_rotation_from_accel(void)
     }
 
     s_last_rot_quadrant = q;
-    int16_t deg10 = quadrant_to_deg10(q);
+    int16_t deg10 = (int16_t)((quadrant_to_deg10(q) + 1800) % 3600);
 
     lv_obj_set_style_transform_pivot_x(s_time_lbl, lv_obj_get_width(s_time_lbl) / 2, 0);
     lv_obj_set_style_transform_pivot_y(s_time_lbl, 22, 0);
