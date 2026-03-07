@@ -145,36 +145,33 @@ static void checkbox_changed_cb(lv_event_t *e)
 
 static void style_checkbox_variant(lv_obj_t *cb, uint8_t style_id)
 {
+    /* Base negro + verde para todas las variantes */
+    lv_obj_set_style_text_color(cb, lv_color_hex(0x00FF66), 0);
+    lv_obj_set_style_bg_color(cb, lv_color_hex(0x000000), LV_PART_INDICATOR);
+    lv_obj_set_style_border_color(cb, lv_color_hex(0x00AA44), LV_PART_INDICATOR);
+    lv_obj_set_style_border_width(cb, 2, LV_PART_INDICATOR);
+
     switch (style_id) {
-        case 0: /* Verde clásico */
-            lv_obj_set_style_text_color(cb, lv_color_hex(0x00FF66), 0);
+        case 0:
             lv_obj_set_style_bg_color(cb, lv_color_hex(0x00AA44), LV_PART_INDICATOR | LV_STATE_CHECKED);
             break;
-        case 1: /* Verde sólido */
-            lv_obj_set_style_border_color(cb, lv_color_hex(0x22CC66), LV_PART_INDICATOR);
+        case 1:
             lv_obj_set_style_bg_color(cb, lv_color_hex(0x008833), LV_PART_INDICATOR | LV_STATE_CHECKED);
-            lv_obj_set_style_text_color(cb, lv_color_hex(0x66EE99), 0);
+            lv_obj_set_style_border_color(cb, lv_color_hex(0x22CC66), LV_PART_INDICATOR);
             break;
-        case 2: /* Naranja redondo */
+        case 2:
             lv_obj_set_style_radius(cb, 12, LV_PART_INDICATOR);
-            lv_obj_set_style_border_width(cb, 2, LV_PART_INDICATOR);
-            lv_obj_set_style_border_color(cb, lv_color_hex(0xFF9933), LV_PART_INDICATOR);
-            lv_obj_set_style_bg_color(cb, lv_color_hex(0xFF6600), LV_PART_INDICATOR | LV_STATE_CHECKED);
-            lv_obj_set_style_text_color(cb, lv_color_hex(0xFFAA55), 0);
+            lv_obj_set_style_bg_color(cb, lv_color_hex(0x00CC55), LV_PART_INDICATOR | LV_STATE_CHECKED);
             break;
-        case 3: /* Morado glow */
-            lv_obj_set_style_border_color(cb, lv_color_hex(0xAA66FF), LV_PART_INDICATOR);
+        case 3:
             lv_obj_set_style_shadow_width(cb, 8, LV_PART_INDICATOR | LV_STATE_CHECKED);
-            lv_obj_set_style_shadow_color(cb, lv_color_hex(0xAA66FF), LV_PART_INDICATOR | LV_STATE_CHECKED);
-            lv_obj_set_style_bg_color(cb, lv_color_hex(0x8844FF), LV_PART_INDICATOR | LV_STATE_CHECKED);
-            lv_obj_set_style_text_color(cb, lv_color_hex(0xCC99FF), 0);
+            lv_obj_set_style_shadow_color(cb, lv_color_hex(0x00CC66), LV_PART_INDICATOR | LV_STATE_CHECKED);
+            lv_obj_set_style_bg_color(cb, lv_color_hex(0x00AA55), LV_PART_INDICATOR | LV_STATE_CHECKED);
             break;
-        case 4: /* Rojo invertido */
+        case 4:
         default:
-            lv_obj_set_style_bg_color(cb, lv_color_hex(0x660000), LV_PART_INDICATOR);
-            lv_obj_set_style_bg_color(cb, lv_color_hex(0xFF3333), LV_PART_INDICATOR | LV_STATE_CHECKED);
-            lv_obj_set_style_border_color(cb, lv_color_hex(0xFF6666), LV_PART_INDICATOR);
-            lv_obj_set_style_text_color(cb, lv_color_hex(0xFF7777), 0);
+            lv_obj_set_style_bg_color(cb, lv_color_hex(0x00DD66), LV_PART_INDICATOR | LV_STATE_CHECKED);
+            lv_obj_set_style_border_color(cb, lv_color_hex(0x66EE99), LV_PART_INDICATOR);
             break;
     }
 }
@@ -196,6 +193,7 @@ static void create_checkbox_tile(lv_obj_t *tile, uint8_t idx)
     lv_checkbox_set_text(cb, cb_txt);
     style_checkbox_variant(cb, idx);
     lv_obj_align(cb, LV_ALIGN_CENTER, 0, -8);
+    lv_obj_set_style_text_color(cb, lv_color_hex(0x00FF66), 0);
     lv_obj_add_event_cb(cb, checkbox_changed_cb, LV_EVENT_VALUE_CHANGED, (void *)(uintptr_t)idx);
 
     s_cb_status_lbl[idx] = lv_label_create(tile);
