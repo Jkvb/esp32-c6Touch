@@ -43,6 +43,7 @@ static uint8_t s_rot_stable_count = 0;
 #define UI_TOUCH_LOG_ENABLE 0
 #define UI_TOUCH_DBG_W 170
 #define UI_TOUCH_DBG_H 320
+#define UI_ROT_STABLE_SAMPLES 2
 
 #if UI_TOUCH_DEBUG_OVERLAY
 static lv_obj_t *s_touch_cross_h = NULL;
@@ -246,7 +247,7 @@ static void update_clock_rotation_from_accel(void)
         s_rot_stable_count = 0;
     }
 
-    if (s_rot_stable_count < 3 || q == s_last_rot_quadrant) {
+    if (s_rot_stable_count < UI_ROT_STABLE_SAMPLES || q == s_last_rot_quadrant) {
         return;
     }
 
@@ -297,7 +298,7 @@ static void clock_timer_cb(lv_timer_t *t)
         if (s_date_lbl) lv_label_set_text(s_date_lbl, date_buf);
     }
 
-    /* Rotación por acelerómetro (suavizada) */
+    /* Rotación por acelerómetro (hora + fecha + marca, respuesta rápida) */
     update_clock_rotation_from_accel();
 }
 
@@ -368,7 +369,7 @@ void ui_clock_create(void)
     }
 
     set_active_tile(0, LV_ANIM_OFF);
-    lv_timer_create(clock_timer_cb, 200, NULL);
+    lv_timer_create(clock_timer_cb, 100, NULL);
 
 #if UI_TOUCH_DEBUG_OVERLAY
     s_touch_cross_h = lv_obj_create(scr);
