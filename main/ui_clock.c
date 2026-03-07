@@ -20,6 +20,11 @@
 
 static const char *TAG_UI = "UI_CLOCK";
 
+#define UI_COLOR_BG        0x00140A
+#define UI_COLOR_BG_DARK   0x000D06
+#define UI_COLOR_TEXT_MAIN 0x00FF66
+#define UI_COLOR_TEXT_SUB  0x00BB55
+
 static lv_obj_t *s_tileview = NULL;
 static lv_obj_t *s_tiles[6] = {0};
 static lv_obj_t *s_brand_lbl = NULL;
@@ -146,9 +151,9 @@ static void checkbox_changed_cb(lv_event_t *e)
 static void style_checkbox_variant(lv_obj_t *cb, uint8_t style_id)
 {
     /* Base negro + verde para todas las variantes */
-    lv_obj_set_style_text_color(cb, lv_color_hex(0x00FF66), 0);
-    lv_obj_set_style_bg_color(cb, lv_color_hex(0x000000), LV_PART_INDICATOR);
-    lv_obj_set_style_border_color(cb, lv_color_hex(0x00AA44), LV_PART_INDICATOR);
+    lv_obj_set_style_text_color(cb, lv_color_hex(UI_COLOR_TEXT_MAIN), 0);
+    lv_obj_set_style_bg_color(cb, lv_color_hex(UI_COLOR_BG_DARK), LV_PART_INDICATOR);
+    lv_obj_set_style_border_color(cb, lv_color_hex(UI_COLOR_TEXT_SUB), LV_PART_INDICATOR);
     lv_obj_set_style_border_width(cb, 2, LV_PART_INDICATOR);
 
     switch (style_id) {
@@ -178,13 +183,13 @@ static void style_checkbox_variant(lv_obj_t *cb, uint8_t style_id)
 
 static void create_checkbox_tile(lv_obj_t *tile, uint8_t idx)
 {
-    lv_obj_set_style_bg_color(tile, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(tile, lv_color_hex(UI_COLOR_BG), 0);
     lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(tile, 0, 0);
 
     lv_obj_t *ttl = lv_label_create(tile);
     lv_label_set_text_fmt(ttl, "Pantalla %d", (int)(idx + 1));
-    lv_obj_set_style_text_color(ttl, lv_color_hex(0x00ff66), 0);
+    lv_obj_set_style_text_color(ttl, lv_color_hex(UI_COLOR_TEXT_MAIN), 0);
     lv_obj_align(ttl, LV_ALIGN_TOP_MID, 0, 16);
 
     lv_obj_t *cb = lv_checkbox_create(tile);
@@ -193,12 +198,12 @@ static void create_checkbox_tile(lv_obj_t *tile, uint8_t idx)
     lv_checkbox_set_text(cb, cb_txt);
     style_checkbox_variant(cb, idx);
     lv_obj_align(cb, LV_ALIGN_CENTER, 0, -8);
-    lv_obj_set_style_text_color(cb, lv_color_hex(0x00FF66), 0);
+    lv_obj_set_style_text_color(cb, lv_color_hex(UI_COLOR_TEXT_MAIN), 0);
     lv_obj_add_event_cb(cb, checkbox_changed_cb, LV_EVENT_VALUE_CHANGED, (void *)(uintptr_t)idx);
 
     s_cb_status_lbl[idx] = lv_label_create(tile);
     lv_label_set_text(s_cb_status_lbl[idx], "Estado: INACTIVO");
-    lv_obj_set_style_text_color(s_cb_status_lbl[idx], lv_color_hex(0x00AA44), 0);
+    lv_obj_set_style_text_color(s_cb_status_lbl[idx], lv_color_hex(UI_COLOR_TEXT_SUB), 0);
     lv_obj_align(s_cb_status_lbl[idx], LV_ALIGN_CENTER, 0, 26);
 }
 
@@ -295,12 +300,13 @@ void ui_clock_create(void)
     ESP_LOGI(TAG_UI, "ui_clock_create init (modo 6 pantallas)");
     ESP_LOGI(TAG_UI, "Swipe lateral habilitado (pantallas fijas)");
 
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(scr, lv_color_hex(UI_COLOR_BG_DARK), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
     s_tileview = lv_tileview_create(scr);
     lv_obj_set_size(s_tileview, lv_pct(100), lv_pct(100));
-    lv_obj_set_style_bg_color(s_tileview, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(s_tileview, lv_color_hex(UI_COLOR_BG_DARK), 0);
+    lv_obj_set_style_bg_opa(s_tileview, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(s_tileview, 0, 0);
     lv_obj_add_event_cb(s_tileview, tile_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_set_scroll_snap_x(s_tileview, LV_SCROLL_SNAP_CENTER);
@@ -324,21 +330,21 @@ void ui_clock_create(void)
     }
 
     /* Pantalla 1: Reloj (fondo negro, letras verdes) */
-    lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(UI_COLOR_BG), 0);
     lv_obj_set_style_bg_opa(s_tiles[0], LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(s_tiles[0], 0, 0);
 
     s_brand_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text(s_brand_lbl, "wichIA");
     lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
-    lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x00cc44), 0);
+    lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(UI_COLOR_TEXT_SUB), 0);
     lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
 
     s_time_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text(s_time_lbl, "--:--:--");
     lv_obj_set_style_text_font(s_time_lbl, CLOCK_FONT, 0);
     lv_obj_set_style_text_align(s_time_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x00ff66), 0);
+    lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(UI_COLOR_TEXT_MAIN), 0);
     lv_obj_set_width(s_time_lbl, lv_pct(98));
     lv_obj_set_style_pad_left(s_time_lbl, 2, 0);
     lv_obj_set_style_pad_right(s_time_lbl, 2, 0);
@@ -346,7 +352,7 @@ void ui_clock_create(void)
 
     s_date_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text(s_date_lbl, "--/--/----");
-    lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x00AA44), 0);
+    lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(UI_COLOR_TEXT_SUB), 0);
     lv_obj_set_style_text_letter_space(s_date_lbl, 1, 0);
     lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 26);
 
