@@ -30,6 +30,8 @@ static lv_obj_t *s_tiles[6] = {0};
 static lv_obj_t *s_brand_lbl = NULL;
 static lv_obj_t *s_time_lbl = NULL;
 static lv_obj_t *s_date_lbl = NULL;
+static char s_time_text[16] = "--:--:--";
+static char s_date_text[24] = "--/--/----";
 
 static volatile int16_t s_ax = 0;
 static volatile int16_t s_ay = 0;
@@ -285,17 +287,15 @@ static void clock_timer_cb(lv_timer_t *t)
     if (ti.tm_sec != s_last_sec) {
         s_last_sec = ti.tm_sec;
 
-        char time_buf[16];
-        char date_buf[24];
         if (ti.tm_year < (2024 - 1900)) {
-            snprintf(time_buf, sizeof(time_buf), "--:--:--");
-            snprintf(date_buf, sizeof(date_buf), "--/--/----");
+            snprintf(s_time_text, sizeof(s_time_text), "--:--:--");
+            snprintf(s_date_text, sizeof(s_date_text), "--/--/----");
         } else {
-            snprintf(time_buf, sizeof(time_buf), "%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
-            strftime(date_buf, sizeof(date_buf), "%d/%m/%Y", &ti);
+            snprintf(s_time_text, sizeof(s_time_text), "%02d:%02d:%02d", ti.tm_hour, ti.tm_min, ti.tm_sec);
+            strftime(s_date_text, sizeof(s_date_text), "%d/%m/%Y", &ti);
         }
-        lv_label_set_text(s_time_lbl, time_buf);
-        if (s_date_lbl) lv_label_set_text(s_date_lbl, date_buf);
+        lv_label_set_text_static(s_time_lbl, s_time_text);
+        if (s_date_lbl) lv_label_set_text_static(s_date_lbl, s_date_text);
     }
 
     /* Rotación por acelerómetro (hora + fecha + marca, respuesta rápida) */
@@ -349,7 +349,7 @@ void ui_clock_create(void)
     lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
 
     s_time_lbl = lv_label_create(s_tiles[0]);
-    lv_label_set_text(s_time_lbl, "--:--:--");
+    lv_label_set_text_static(s_time_lbl, s_time_text);
     lv_obj_set_style_text_font(s_time_lbl, CLOCK_FONT, 0);
     lv_obj_set_style_text_align(s_time_lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(UI_COLOR_TEXT_MAIN), 0);
@@ -359,7 +359,7 @@ void ui_clock_create(void)
     lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -24);
 
     s_date_lbl = lv_label_create(s_tiles[0]);
-    lv_label_set_text(s_date_lbl, "--/--/----");
+    lv_label_set_text_static(s_date_lbl, s_date_text);
     lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(UI_COLOR_TEXT_SUB), 0);
     lv_obj_set_style_text_letter_space(s_date_lbl, 1, 0);
     lv_obj_set_width(s_date_lbl, lv_pct(98));
