@@ -46,8 +46,9 @@ static disp_rot_t rot_from_accel(float ax, float ay)
         if (ay > TH)  return DISP_ROT_0;
         if (ay < -TH) return DISP_ROT_180;
     } else {
-        if (ax > TH)  return DISP_ROT_270;
-        if (ax < -TH) return DISP_ROT_90;
+        /* Horizontal estaba invertido; intercambiamos 90°/270°. */
+        if (ax > TH)  return DISP_ROT_90;
+        if (ax < -TH) return DISP_ROT_270;
     }
     return display_st7789_get_rotation();
 }
