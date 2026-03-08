@@ -254,23 +254,14 @@ static void update_clock_rotation_from_accel(void)
     }
 
     s_last_rot_quadrant = q;
-    int16_t deg10 = (int16_t)((quadrant_to_deg10(q) + 1800) % 3600);
 
-    lv_obj_set_style_transform_pivot_x(s_time_lbl, lv_obj_get_width(s_time_lbl) / 2, 0);
-    lv_obj_set_style_transform_pivot_y(s_time_lbl, 22, 0);
-    lv_obj_set_style_transform_rotation(s_time_lbl, deg10, 0);
-
-    lv_obj_set_style_transform_pivot_x(s_brand_lbl, lv_obj_get_width(s_brand_lbl) / 2, 0);
-    lv_obj_set_style_transform_pivot_y(s_brand_lbl, 10, 0);
-    lv_obj_set_style_transform_rotation(s_brand_lbl, deg10, 0);
-
-    if (s_date_lbl) {
-        lv_obj_set_style_transform_pivot_x(s_date_lbl, lv_obj_get_width(s_date_lbl) / 2, 0);
-        lv_obj_set_style_transform_pivot_y(s_date_lbl, 8, 0);
-        lv_obj_set_style_transform_rotation(s_date_lbl, deg10, 0);
-    }
-
-    ESP_LOGI(TAG_UI, "Rotación reloj=%d° (ax=%d ay=%d)", (int)(deg10 / 10), (int)s_ax, (int)s_ay);
+    /*
+     * Rotación visual de LVGL por transform en labels puede causar creación
+     * de draw buffers/layers en software y disparar WDT en runtimes largos.
+     * La rotación final se aplica ahora a nivel display desde imu_task.
+     */
+    ESP_LOGI(TAG_UI, "Rot detectada para display=%d° (ax=%d ay=%d)",
+             (int)(quadrant_to_deg10(q) / 10), (int)s_ax, (int)s_ay);
 }
 
 static void clock_timer_cb(lv_timer_t *t)

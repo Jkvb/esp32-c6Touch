@@ -77,9 +77,10 @@ static void imu_task(void *arg)
             if (r == cand) stable++;
             else { cand = r; stable = 0; }
 
-            if (stable >= 3 && cand != cur) {
+            if (stable >= 2 && cand != cur) {
                 cur = cand;
-                ESP_LOGI(TAG, "ROT detectada=%d (ax=%.2f ay=%.2f az=%.2f) [auto-rot desactivada]",
+                display_st7789_set_rotation(cur);
+                ESP_LOGI(TAG, "ROT aplicada=%d (ax=%.2f ay=%.2f az=%.2f)",
                          (int)cur, a.ax, a.ay, a.az);
             }
             vTaskDelay(pdMS_TO_TICKS(100));
