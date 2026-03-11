@@ -53,6 +53,11 @@ static esp_timer_handle_t s_lv_tick_timer;
 
 static bool s_touch_inited = false;
 static lv_indev_t *s_touch_indev = NULL;
+static bool s_touch_prev_pressed = false;
+static int16_t s_touch_prev_x = -1;
+static int16_t s_touch_prev_y = -1;
+static uint32_t s_touch_move_log_count = 0;
+static uint32_t s_touch_read_err_count = 0;
 
 static esp_err_t touch_i2c_init_once(void)
 {
@@ -120,21 +125,33 @@ static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
     uint8_t p[6] = {0};
     esp_err_t r = touch_rd(0x01, p, sizeof(p));
     if (r != ESP_OK) {
+        s_touch_read_err_count++;
+        if (s_touch_prev_pressed || s_touch_read_err_count == 1 || (s_touch_read_err_count % 20U) == 0U) {
+            ESP_LOGW(TAG, "touch read error r=0x%x cnt=%lu", (unsigned)r, (unsigned long)s_touch_read_err_count);
+        }
         data->state = LV_INDEV_STATE_RELEASED;
+        s_touch_prev_pressed = false;
         ui_clock_set_touch_debug(0, 0, false);
         return;
     }
+    s_touch_read_err_count = 0;
 
     uint8_t points = p[1] & 0x0F;
     bool pressed = points > 0;
     if (!pressed) {
+        if (s_touch_prev_pressed) {
+            ESP_LOGI(TAG, "TOUCH release last=(%d,%d)", (int)s_touch_prev_x, (int)s_touch_prev_y);
+        }
         data->state = LV_INDEV_STATE_RELEASED;
+        s_touch_prev_pressed = false;
         ui_clock_set_touch_debug(0, 0, false);
         return;
     }
 
     int16_t x = (int16_t)(((p[2] & 0x0F) << 8) | p[3]);
     int16_t y = (int16_t)(((p[4] & 0x0F) << 8) | p[5]);
+    int16_t raw_x = x;
+    int16_t raw_y = y;
 
     /* Ajuste de touch según la rotación activa del display */
     disp_rot_t rot = display_st7789_get_rotation();
@@ -176,6 +193,19 @@ static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
     data->state = LV_INDEV_STATE_PRESSED;
     data->point.x = x;
     data->point.y = y;
+
+    if (!s_touch_prev_pressed) {
+        ESP_LOGI(TAG, "TOUCH press raw=(%d,%d) map=(%d,%d) rot=%d", (int)raw_x, (int)raw_y, (int)x, (int)y, (int)rot);
+    } else if (x != s_touch_prev_x || y != s_touch_prev_y) {
+        s_touch_move_log_count++;
+        if ((s_touch_move_log_count % 15U) == 0U) {
+            ESP_LOGI(TAG, "TOUCH move map=(%d,%d) rot=%d", (int)x, (int)y, (int)rot);
+        }
+    }
+    s_touch_prev_pressed = true;
+    s_touch_prev_x = x;
+    s_touch_prev_y = y;
+
     ui_clock_set_touch_debug(x, y, true);
 }
 
