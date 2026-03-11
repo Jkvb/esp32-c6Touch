@@ -19,6 +19,36 @@
   #define CLOCK_FONT (LV_FONT_DEFAULT)
 #endif
 
+#if defined(LV_FONT_MONTSERRAT_40) && (LV_FONT_MONTSERRAT_40)
+  #define WF_TIME_FONT_0 (&lv_font_montserrat_40)
+#else
+  #define WF_TIME_FONT_0 CLOCK_FONT
+#endif
+
+#if defined(LV_FONT_MONTSERRAT_32) && (LV_FONT_MONTSERRAT_32)
+  #define WF_TIME_FONT_1 (&lv_font_montserrat_32)
+#else
+  #define WF_TIME_FONT_1 CLOCK_FONT
+#endif
+
+#if defined(LV_FONT_MONTSERRAT_28) && (LV_FONT_MONTSERRAT_28)
+  #define WF_TIME_FONT_2 (&lv_font_montserrat_28)
+#else
+  #define WF_TIME_FONT_2 CLOCK_FONT
+#endif
+
+#if defined(LV_FONT_MONTSERRAT_24) && (LV_FONT_MONTSERRAT_24)
+  #define WF_TIME_FONT_3 (&lv_font_montserrat_24)
+#else
+  #define WF_TIME_FONT_3 CLOCK_FONT
+#endif
+
+#if defined(LV_FONT_MONTSERRAT_20) && (LV_FONT_MONTSERRAT_20)
+  #define WF_DATE_FONT_ALT (&lv_font_montserrat_20)
+#else
+  #define WF_DATE_FONT_ALT LV_FONT_DEFAULT
+#endif
+
 static const char *TAG_UI = "UI_CLOCK";
 
 #define UI_COLOR_BG        0x000000
@@ -225,41 +255,70 @@ static void apply_watchface(uint8_t idx)
 {
     if (!s_tiles[0] || !s_brand_lbl || !s_time_lbl || !s_date_lbl) return;
 
+    lv_obj_clear_flag(s_brand_lbl, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_text_font(s_date_lbl, LV_FONT_DEFAULT, 0);
+    lv_obj_set_style_text_letter_space(s_time_lbl, 0, 0);
+
     switch (idx % UI_WATCHFACE_COUNT) {
         case 0:
             lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000000), 0);
             lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x39FF14), 0);
             lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x1ED760), 0);
             lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x1ED760), 0);
+            lv_obj_set_style_text_font(s_time_lbl, WF_TIME_FONT_0, 0);
+            lv_obj_set_style_text_font(s_date_lbl, WF_DATE_FONT_ALT, 0);
+            lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -22);
+            lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 48);
             lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
             break;
         case 1:
-            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x00110A), 0);
-            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x66FF66), 0);
-            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x33DD88), 0);
-            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x33DD88), 0);
+            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x0B0014), 0);
+            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0xBB88FF), 0);
+            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x8A5CFF), 0);
+            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x8A5CFF), 0);
+            lv_obj_set_style_text_font(s_time_lbl, WF_TIME_FONT_1, 0);
+            lv_obj_set_style_text_font(s_date_lbl, LV_FONT_DEFAULT, 0);
+            lv_obj_set_style_text_letter_space(s_time_lbl, 1, 0);
+            lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -17);
+            lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 44);
             lv_obj_set_style_text_letter_space(s_brand_lbl, 3, 0);
             break;
         case 2:
-            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x050505), 0);
-            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x00FFAA), 0);
-            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x00CC88), 0);
-            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x00CC88), 0);
+            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x120400), 0);
+            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0xFF9F1A), 0);
+            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0xFF7A00), 0);
+            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0xFF7A00), 0);
+            lv_obj_set_style_text_font(s_time_lbl, WF_TIME_FONT_2, 0);
+            lv_obj_set_style_text_font(s_date_lbl, WF_DATE_FONT_ALT, 0);
+            lv_obj_set_style_text_letter_space(s_time_lbl, 2, 0);
+            lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -15);
+            lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 42);
             lv_obj_set_style_text_letter_space(s_brand_lbl, 1, 0);
             break;
         case 3:
-            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000000), 0);
-            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0xB7FF00), 0);
-            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x7FD100), 0);
-            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x7FD100), 0);
+            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x001018), 0);
+            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x2DE2FF), 0);
+            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x00B8D4), 0);
+            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x00B8D4), 0);
+            lv_obj_set_style_text_font(s_time_lbl, WF_TIME_FONT_3, 0);
+            lv_obj_set_style_text_font(s_date_lbl, LV_FONT_DEFAULT, 0);
+            lv_obj_set_style_text_letter_space(s_time_lbl, 0, 0);
+            lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -10);
+            lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 40);
             lv_obj_set_style_text_letter_space(s_brand_lbl, 4, 0);
             break;
         case 4:
         default:
-            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000A00), 0);
-            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x44FF99), 0);
-            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x22DD77), 0);
-            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x22DD77), 0);
+            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000000), 0);
+            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0xFF4FD8), 0);
+            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0xFF4FD8), 0);
+            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0xFF4FD8), 0);
+            lv_obj_set_style_text_font(s_time_lbl, WF_TIME_FONT_1, 0);
+            lv_obj_set_style_text_font(s_date_lbl, WF_DATE_FONT_ALT, 0);
+            lv_obj_set_style_text_letter_space(s_time_lbl, 1, 0);
+            lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -16);
+            lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 46);
+            lv_obj_add_flag(s_brand_lbl, LV_OBJ_FLAG_HIDDEN);
             lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
             break;
     }
