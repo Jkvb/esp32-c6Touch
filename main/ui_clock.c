@@ -43,11 +43,20 @@ static uint8_t s_last_rot_quadrant = 0;
 static uint8_t s_rot_candidate = 0;
 static uint8_t s_rot_stable_count = 0;
 static disp_rot_t s_last_disp_rot_seen = DISP_ROT_0;
+static uint8_t s_watchface_idx = 0;
+static bool s_watchface_select_mode = false;
+static bool s_face_pressing = false;
+static bool s_face_longpress_done = false;
+static uint32_t s_face_press_ms = 0;
+static uint32_t s_last_click_ms = 0;
 #define UI_TOUCH_DEBUG_OVERLAY 0
 #define UI_TOUCH_LOG_ENABLE 0
 #define UI_TOUCH_DBG_W 170
 #define UI_TOUCH_DBG_H 320
 #define UI_ROT_STABLE_SAMPLES 2
+#define UI_WATCHFACE_COUNT 5
+#define UI_FACE_HOLD_MS 3000
+#define UI_FACE_DBLCLICK_MS 350
 
 #if UI_TOUCH_DEBUG_OVERLAY
 static lv_obj_t *s_touch_cross_h = NULL;
@@ -212,6 +221,88 @@ static void create_checkbox_tile(lv_obj_t *tile, uint8_t idx)
     lv_obj_align(s_cb_status_lbl[idx], LV_ALIGN_CENTER, 0, 26);
 }
 
+static void apply_watchface(uint8_t idx)
+{
+    if (!s_tiles[0] || !s_brand_lbl || !s_time_lbl || !s_date_lbl) return;
+
+    switch (idx % UI_WATCHFACE_COUNT) {
+        case 0:
+            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000000), 0);
+            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x39FF14), 0);
+            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x1ED760), 0);
+            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x1ED760), 0);
+            lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
+            break;
+        case 1:
+            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x00110A), 0);
+            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x66FF66), 0);
+            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x33DD88), 0);
+            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x33DD88), 0);
+            lv_obj_set_style_text_letter_space(s_brand_lbl, 3, 0);
+            break;
+        case 2:
+            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x050505), 0);
+            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x00FFAA), 0);
+            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x00CC88), 0);
+            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x00CC88), 0);
+            lv_obj_set_style_text_letter_space(s_brand_lbl, 1, 0);
+            break;
+        case 3:
+            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000000), 0);
+            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0xB7FF00), 0);
+            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x7FD100), 0);
+            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x7FD100), 0);
+            lv_obj_set_style_text_letter_space(s_brand_lbl, 4, 0);
+            break;
+        case 4:
+        default:
+            lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(0x000A00), 0);
+            lv_obj_set_style_text_color(s_time_lbl, lv_color_hex(0x44FF99), 0);
+            lv_obj_set_style_text_color(s_date_lbl, lv_color_hex(0x22DD77), 0);
+            lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(0x22DD77), 0);
+            lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
+            break;
+    }
+}
+
+static void clock_face_touch_cb(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+
+    if (code == LV_EVENT_PRESSED) {
+        s_face_pressing = true;
+        s_face_longpress_done = false;
+        s_face_press_ms = lv_tick_get();
+        return;
+    }
+
+    if (code == LV_EVENT_PRESSING) {
+        if (s_face_pressing && !s_face_longpress_done && lv_tick_elaps(s_face_press_ms) >= UI_FACE_HOLD_MS) {
+            s_face_longpress_done = true;
+            s_watchface_select_mode = true;
+            ESP_LOGI(TAG_UI, "Modo watchface ON (doble click para cambiar)");
+        }
+        return;
+    }
+
+    if (code == LV_EVENT_RELEASED) {
+        s_face_pressing = false;
+        return;
+    }
+
+    if (code == LV_EVENT_CLICKED) {
+        uint32_t now = lv_tick_get();
+        bool is_double = (now - s_last_click_ms) <= UI_FACE_DBLCLICK_MS;
+        s_last_click_ms = now;
+
+        if (is_double && s_watchface_select_mode) {
+            s_watchface_idx = (uint8_t)((s_watchface_idx + 1U) % UI_WATCHFACE_COUNT);
+            apply_watchface(s_watchface_idx);
+            ESP_LOGI(TAG_UI, "Watchface seleccionado=%d", (int)(s_watchface_idx + 1));
+        }
+    }
+}
+
 static uint8_t accel_to_quadrant(int16_t ax, int16_t ay, bool valid)
 {
     if (!valid) return s_last_rot_quadrant;
@@ -343,6 +434,11 @@ void ui_clock_create(void)
     lv_obj_set_style_bg_color(s_tiles[0], lv_color_hex(UI_COLOR_BG), 0);
     lv_obj_set_style_bg_opa(s_tiles[0], LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(s_tiles[0], 0, 0);
+    lv_obj_add_flag(s_tiles[0], LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_tiles[0], clock_face_touch_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(s_tiles[0], clock_face_touch_cb, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(s_tiles[0], clock_face_touch_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(s_tiles[0], clock_face_touch_cb, LV_EVENT_CLICKED, NULL);
 
     s_brand_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text(s_brand_lbl, "wichIA");
@@ -358,7 +454,7 @@ void ui_clock_create(void)
     lv_obj_set_width(s_time_lbl, lv_pct(98));
     lv_obj_set_style_pad_left(s_time_lbl, 2, 0);
     lv_obj_set_style_pad_right(s_time_lbl, 2, 0);
-    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -24);
+    lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -19);
 
     s_date_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text_static(s_date_lbl, s_date_text);
@@ -367,6 +463,7 @@ void ui_clock_create(void)
     lv_obj_set_width(s_date_lbl, lv_pct(98));
     lv_obj_set_style_text_align(s_date_lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 46);
+    apply_watchface(s_watchface_idx);
 
     for (uint8_t i = 1; i < 6; i++) {
         create_checkbox_tile(s_tiles[i], (uint8_t)(i - 1));
