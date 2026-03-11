@@ -1,4 +1,5 @@
 #include "ui_clock.h"
+#include "display_st7789_lvgl.h"
 #include "lvgl.h"
 #include "esp_log.h"
 
@@ -41,6 +42,7 @@ static uint8_t s_active_tile = 0;
 static uint8_t s_last_rot_quadrant = 0;
 static uint8_t s_rot_candidate = 0;
 static uint8_t s_rot_stable_count = 0;
+static disp_rot_t s_last_disp_rot_seen = DISP_ROT_0;
 #define UI_TOUCH_DEBUG_OVERLAY 0
 #define UI_TOUCH_LOG_ENABLE 0
 #define UI_TOUCH_DBG_W 170
@@ -289,6 +291,15 @@ static void clock_timer_cb(lv_timer_t *t)
         if (s_date_lbl) lv_label_set_text_static(s_date_lbl, s_date_text);
     }
 
+    disp_rot_t cur_rot = display_st7789_get_rotation();
+    if (cur_rot != s_last_disp_rot_seen) {
+        s_last_disp_rot_seen = cur_rot;
+        /* Re-centrar tile activo para evitar vista 50/50 tras rotación. */
+        set_active_tile(s_active_tile, LV_ANIM_OFF);
+        lv_obj_update_layout(s_tileview);
+        ESP_LOGI(TAG_UI, "TileView realineado tras rotación=%d (tile=%d)", (int)cur_rot, (int)s_active_tile + 1);
+    }
+
     /* Rotación por acelerómetro (hora + fecha + marca, respuesta rápida) */
     update_clock_rotation_from_accel();
 }
@@ -362,6 +373,7 @@ void ui_clock_create(void)
     }
 
     set_active_tile(0, LV_ANIM_OFF);
+    s_last_disp_rot_seen = display_st7789_get_rotation();
     lv_timer_create(clock_timer_cb, 100, NULL);
 
 #if UI_TOUCH_DEBUG_OVERLAY
