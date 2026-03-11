@@ -354,7 +354,11 @@ static void clock_face_touch_cb(lv_event_t *e)
         bool is_double = (now - s_last_click_ms) <= UI_FACE_DBLCLICK_MS;
         s_last_click_ms = now;
 
-        if (is_double && s_watchface_select_mode) {
+        if (is_double) {
+            if (!s_watchface_select_mode) {
+                s_watchface_select_mode = true;
+                ESP_LOGI(TAG_UI, "Modo watchface ON (activado por doble click)");
+            }
             s_watchface_idx = (uint8_t)((s_watchface_idx + 1U) % UI_WATCHFACE_COUNT);
             apply_watchface(s_watchface_idx);
             ESP_LOGI(TAG_UI, "Watchface seleccionado=%d", (int)(s_watchface_idx + 1));
@@ -504,6 +508,11 @@ void ui_clock_create(void)
     lv_obj_set_style_text_letter_space(s_brand_lbl, 2, 0);
     lv_obj_set_style_text_color(s_brand_lbl, lv_color_hex(UI_COLOR_TEXT_SUB), 0);
     lv_obj_align(s_brand_lbl, LV_ALIGN_TOP_MID, 0, 18);
+    lv_obj_add_flag(s_brand_lbl, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_event_cb(s_brand_lbl, clock_face_touch_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(s_brand_lbl, clock_face_touch_cb, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(s_brand_lbl, clock_face_touch_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(s_brand_lbl, clock_face_touch_cb, LV_EVENT_CLICKED, NULL);
 
     s_time_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text_static(s_time_lbl, s_time_text);
@@ -514,6 +523,11 @@ void ui_clock_create(void)
     lv_obj_set_style_pad_left(s_time_lbl, 2, 0);
     lv_obj_set_style_pad_right(s_time_lbl, 2, 0);
     lv_obj_align(s_time_lbl, LV_ALIGN_CENTER, 0, -19);
+    lv_obj_add_flag(s_time_lbl, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_event_cb(s_time_lbl, clock_face_touch_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(s_time_lbl, clock_face_touch_cb, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(s_time_lbl, clock_face_touch_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(s_time_lbl, clock_face_touch_cb, LV_EVENT_CLICKED, NULL);
 
     s_date_lbl = lv_label_create(s_tiles[0]);
     lv_label_set_text_static(s_date_lbl, s_date_text);
@@ -522,6 +536,11 @@ void ui_clock_create(void)
     lv_obj_set_width(s_date_lbl, lv_pct(98));
     lv_obj_set_style_text_align(s_date_lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(s_date_lbl, LV_ALIGN_CENTER, 0, 46);
+    lv_obj_add_flag(s_date_lbl, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_event_cb(s_date_lbl, clock_face_touch_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(s_date_lbl, clock_face_touch_cb, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(s_date_lbl, clock_face_touch_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(s_date_lbl, clock_face_touch_cb, LV_EVENT_CLICKED, NULL);
     apply_watchface(s_watchface_idx);
 
     for (uint8_t i = 1; i < 6; i++) {
