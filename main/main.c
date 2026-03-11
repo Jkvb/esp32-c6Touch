@@ -2,6 +2,9 @@
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <errno.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -28,6 +31,50 @@ static bool s_wifi_started = false;
 static bool s_time_synced = false;
 static char s_wifi_ssid[33] = {0};
 static char s_wifi_pass[65] = {0};
+
+static void log_wichia_dir_files(void)
+{
+    const char *dir_path = "/wichia";
+    struct stat st = {0};
+
+    if (stat(dir_path, &st) != 0) {
+        if (errno == ENOENT) {
+            if (mkdir(dir_path, 0777) == 0) {
+                ESP_LOGI(TAG, "Carpeta %s creada", dir_path);
+            } else {
+                ESP_LOGW(TAG, "No se pudo crear %s (errno=%d)", dir_path, errno);
+                return;
+            }
+        } else {
+            ESP_LOGW(TAG, "No se pudo acceder a %s (errno=%d)", dir_path, errno);
+            return;
+        }
+    } else if (!S_ISDIR(st.st_mode)) {
+        ESP_LOGW(TAG, "%s existe pero no es carpeta", dir_path);
+        return;
+    }
+
+    DIR *d = opendir(dir_path);
+    if (!d) {
+        ESP_LOGW(TAG, "No se pudo abrir %s (errno=%d)", dir_path, errno);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Listado de archivos en %s:", dir_path);
+    struct dirent *ent = NULL;
+    int count = 0;
+    while ((ent = readdir(d)) != NULL) {
+        if ((strcmp(ent->d_name, ".") == 0) || (strcmp(ent->d_name, "..") == 0)) {
+            continue;
+        }
+        ESP_LOGI(TAG, " - %s", ent->d_name);
+        count++;
+    }
+    if (count == 0) {
+        ESP_LOGI(TAG, "(sin archivos en %s)", dir_path);
+    }
+    closedir(d);
+}
 
 static void lvgl_task(void *arg)
 {
@@ -315,6 +362,8 @@ void app_main(void)
     wifi_fill_runtime_from_config();
     ui_clock_prefill_wifi(s_wifi_ssid, s_wifi_pass);
     ui_clock_set_wifi_callback(ui_wifi_save_handler);
+
+    log_wichia_dir_files();
 
     xTaskCreate(lvgl_task, "lvgl", 8192, NULL, 5, NULL);
     xTaskCreate(imu_task,  "imu",  3072, NULL, 4, NULL);
