@@ -143,16 +143,16 @@ static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 
     switch (rot) {
         case DISP_ROT_90:
-            tx = (int16_t)(LCD_H_RES - 1 - y);
-            ty = x;
+            tx = y;
+            ty = (int16_t)(LCD_H_RES - 1 - x);
             break;
         case DISP_ROT_180:
             tx = (int16_t)(LCD_H_RES - 1 - x);
             ty = (int16_t)(LCD_V_RES - 1 - y);
             break;
         case DISP_ROT_270:
-            tx = y;
-            ty = (int16_t)(LCD_V_RES - 1 - x);
+            tx = (int16_t)(LCD_V_RES - 1 - y);
+            ty = x;
             break;
         case DISP_ROT_0:
         default:
@@ -164,8 +164,14 @@ static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 
     if (x < 0) x = 0;
     if (y < 0) y = 0;
-    if (x > (LCD_H_RES - 1)) x = (LCD_H_RES - 1);
-    if (y > (LCD_V_RES - 1)) y = (LCD_V_RES - 1);
+    int16_t max_x = (rot == DISP_ROT_90 || rot == DISP_ROT_270)
+                        ? (LCD_V_RES - 1)
+                        : (LCD_H_RES - 1);
+    int16_t max_y = (rot == DISP_ROT_90 || rot == DISP_ROT_270)
+                        ? (LCD_H_RES - 1)
+                        : (LCD_V_RES - 1);
+    if (x > max_x) x = max_x;
+    if (y > max_y) y = max_y;
 
     data->state = LV_INDEV_STATE_PRESSED;
     data->point.x = x;
