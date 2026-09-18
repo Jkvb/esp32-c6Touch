@@ -1,4 +1,4 @@
-﻿# Fuerza finales LF para que no se rompa el build por CRLF raro
+# Keep embedded sources deterministic across Linux and Windows checkouts.
 *.c     text eol=lf
 *.h     text eol=lf
 *.cmake text eol=lf

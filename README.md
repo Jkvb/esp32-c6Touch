@@ -1,53 +1,86 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | ESP32-S31 | Linux |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | --------- | ----- |
+# IAWICHU // NERVE OS
 
-# Hello World Example
+Cyberpunk wearable interface for a prosthetic-hand prototype built on the
+Waveshare ESP32-C6 Touch LCD 1.9. The current milestone provides a responsive
+watchface, touch navigation, gesture-preset previews, live diagnostics, IMU
+rotation, and optional background NTP synchronization.
 
-Starts a FreeRTOS task to print "Hello World".
+## Current controls
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+- Swipe left/right: `CORE`, `HAND`, and `SENSE` pages.
+- Double tap on `CORE`: cycle `NERVE`, `SYNTH`, and `MATRIX` watchfaces.
+- Swipe up/down on `HAND`: browse gesture presets.
+- Tap `<` or `>`: browse presets with large touch targets.
+- Tap `SELECT PRESET`: select a preview. This does **not** move motors.
 
-## How to use example
+The six built-in previews are `OPEN`, `POWER`, `PINCH`, `POINT`, `TRIPOD`, and
+`PEACE`. Each profile displays its five finger positions as animated tendon
+bars. Profiles live in `main/gesture_profiles.c` and are deliberately separate
+from the UI.
 
-Follow detailed instructions provided specifically for this example.
+## Safety boundary
 
-Select the instructions depending on Espressif chip installed on your development board:
+The UI publishes a gesture request through `ui_gesture_request_cb_t`, but the
+application currently logs it only. A future motor supervisor must enforce
+travel limits, current limits, speed limits, fault handling, and an emergency
+open action before connecting this callback to actuators.
 
-- [ESP32 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/stable/get-started/index.html)
-- [ESP32-S2 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s2/get-started/index.html)
+## Confirmed hardware map
 
+| Device | Signal | GPIO / value |
+|---|---|---|
+| ST7789V2 | MOSI | GPIO4 |
+| ST7789V2 | SCLK | GPIO5 |
+| ST7789V2 | DC | GPIO6 |
+| ST7789V2 | CS | GPIO7 |
+| ST7789V2 | RESET | GPIO14 |
+| Backlight | BL | GPIO15, active-low |
+| Shared I2C | SCL | GPIO8 |
+| Shared I2C | SDA | GPIO18 |
+| CST816 family | address | `0x15` |
+| QMI8658C | address | `0x6B` (`0x6A` fallback) |
 
-## Example folder contents
+The visible LCD area is `170x320` with `X gap = 35`, `Y gap = 0`. Do not change
+these pins, gaps, or backlight polarity without a hardware revision.
 
-The project **hello_world** contains one source file in C language [hello_world_main.c](main/hello_world_main.c). The file is located in folder [main](main).
+## Software baseline
 
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt` files that provide set of directives and instructions describing the project's source files and targets (executable, library, or both).
+- ESP-IDF `6.1.x`
+- LVGL `9.5.x`
+- ESP32-C6 target
+- 8 MB physical flash header
+- Custom 2 MB factory application partition
+- Montserrat 48 and 32 only, to keep the firmware compact
 
-Below is short explanation of remaining files in the project folder.
+Touch and IMU share one board-I2C owner (`main/board_i2c.c`). Rotation requests
+are queued by the IMU task and applied inside the LVGL task; background tasks do
+not call LVGL directly.
 
+## Build and flash
+
+Linux:
+
+```bash
+cd /home/charly/PT2025-esp32
+. "$IDF_PATH/export.sh"
+idf.py set-target esp32c6
+idf.py build
+idf.py -p /dev/ttyACM0 flash monitor
 ```
-├── CMakeLists.txt
-├── pytest_hello_world.py      Python script used for automated testing
-├── main
-│   ├── CMakeLists.txt
-│   └── hello_world_main.c
-└── README.md                  This is the file you are currently reading
+
+Adjust the serial port if the board enumerates as `/dev/ttyUSB0` or another
+device.
+
+PowerShell with the existing ESP-IDF installation:
+
+```powershell
+cd "$env:USERPROFILE\esp32\esp32-c6Touch"
+Set-ExecutionPolicy -Scope Process Bypass -Force
+. C:\esp\esp-idf\export.ps1
+idf.py set-target esp32c6
+idf.py -p COM6 build flash monitor
 ```
 
-For more information on structure and contents of ESP-IDF projects, please refer to Section [Build System](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html) of the ESP-IDF Programming Guide.
-
-## Troubleshooting
-
-* Program upload failure
-
-    * Hardware connection is not correct: run `idf.py -p PORT monitor`, and reboot your board to see if there are any output logs.
-    * The baud rate for downloading is too high: lower your baud rate in the `menuconfig` menu, and try again.
-
-## Technical support and feedback
-
-Please use the following feedback channels:
-
-* For technical queries, go to the [esp32.com](https://esp32.com/) forum
-* For a feature request or bug report, create a [GitHub issue](https://github.com/espressif/esp-idf/issues)
-
-We will get back to you as soon as possible.
+Wi-Fi is optional. If `IAWICHU_WIFI_SSID` is empty, `CORE` starts immediately
+with monotonic uptime and the network task stays quiet. When SNTP succeeds, the
+watchface changes to real local time without blocking the interface.

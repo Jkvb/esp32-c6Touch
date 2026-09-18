@@ -1,4 +1,6 @@
 #include <math.h>
+#include <stdbool.h>
+#include <stdatomic.h>
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
@@ -23,9 +25,8 @@ static const char *TAG = "IAWICHU";
 #define WIFI_MAX_RETRIES   8
 
 static EventGroupHandle_t s_wifi_event_group = NULL;
-static int s_wifi_retry_num = 0;
+static atomic_int s_wifi_retry_num = 0;
 static bool s_wifi_started = false;
-static bool s_time_synced = false;
 static char s_wifi_ssid[33] = {0};
 static char s_wifi_pass[65] = {0};
 
@@ -34,8 +35,10 @@ static void lvgl_task(void *arg)
     (void)arg;
     while (1) {
         uint32_t d = lv_timer_handler();
+        if (d == LV_NO_TIMER_READY || d > 20U) d = 20U;
         if (d < 5) d = 5;
-        vTaskDelay(pdMS_TO_TICKS(d));
+        TickType_t ticks = pdMS_TO_TICKS(d);
+        vTaskDelay(ticks > 0 ? ticks : 1);
     }
 }
 
@@ -43,8 +46,8 @@ static disp_rot_t rot_from_accel(float ax, float ay)
 {
     const float TH = 0.55f;
     if (fabsf(ay) > fabsf(ax)) {
-        if (ay > TH)  return DISP_ROT_0;
-        if (ay < -TH) return DISP_ROT_180;
+        if (ay > TH)  return DISP_ROT_180;
+        if (ay < -TH) return DISP_ROT_0;
     } else {
         if (ax > TH)  return DISP_ROT_270;
         if (ax < -TH) return DISP_ROT_90;
@@ -79,7 +82,8 @@ static void imu_task(void *arg)
 
             if (stable >= 3 && cand != cur) {
                 cur = cand;
-                ESP_LOGI(TAG, "ROT detectada=%d (ax=%.2f ay=%.2f az=%.2f) [auto-rot desactivada]",
+                display_st7789_request_rotation(cur);
+                ESP_LOGI(TAG, "ROT solicitada=%d (ax=%.2f ay=%.2f az=%.2f)",
                          (int)cur, a.ax, a.ay, a.az);
             }
             vTaskDelay(pdMS_TO_TICKS(100));
@@ -112,24 +116,33 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 {
     (void)arg;
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        s_wifi_retry_num = 0;
-        esp_wifi_connect();
+        atomic_store_explicit(&s_wifi_retry_num, 0, memory_order_release);
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+        if (esp_wifi_connect() != ESP_OK) {
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_wifi_retry_num < WIFI_MAX_RETRIES) {
-            esp_wifi_connect();
-            s_wifi_retry_num++;
-            ESP_LOGW(TAG, "WiFi reconectando (%d/%d)", s_wifi_retry_num, WIFI_MAX_RETRIES);
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        int retry_count = atomic_load_explicit(&s_wifi_retry_num, memory_order_acquire);
+        if (retry_count < WIFI_MAX_RETRIES) {
+            esp_err_t result = esp_wifi_connect();
+            if (result == ESP_OK) {
+                int attempt = atomic_fetch_add_explicit(&s_wifi_retry_num, 1, memory_order_acq_rel) + 1;
+                ESP_LOGW(TAG, "WiFi reconectando (%d/%d)", attempt, WIFI_MAX_RETRIES);
+            } else {
+                ESP_LOGE(TAG, "WiFi reconnect falló: %s", esp_err_to_name(result));
+                xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            }
         } else {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
             ESP_LOGE(TAG, "WiFi no pudo conectar");
-            s_time_synced = false;
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "WiFi conectado, IP=" IPSTR, IP2STR(&event->ip_info.ip));
-        s_wifi_retry_num = 0;
+        atomic_store_explicit(&s_wifi_retry_num, 0, memory_order_release);
+        xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-        s_time_synced = false;
     }
 }
 
@@ -140,7 +153,8 @@ static esp_err_t app_nvs_init_once(void)
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_erase();
+        if (err != ESP_OK) return err;
         err = nvs_flash_init();
     }
 
@@ -157,18 +171,23 @@ static esp_err_t wifi_connect_blocking(void)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ESP_ERROR_CHECK(app_nvs_init_once());
+    esp_err_t result = app_nvs_init_once();
+    if (result != ESP_OK) return result;
 
-    if (!s_wifi_event_group) s_wifi_event_group = xEventGroupCreate();
+    if (!s_wifi_event_group) {
+        s_wifi_event_group = xEventGroupCreate();
+        if (!s_wifi_event_group) return ESP_ERR_NO_MEM;
+    }
 
     static bool s_netif_inited = false;
     if (!s_netif_inited) {
-        ESP_ERROR_CHECK(esp_netif_init());
+        result = esp_netif_init();
+        if (result != ESP_OK && result != ESP_ERR_INVALID_STATE) return result;
         esp_err_t evr = esp_event_loop_create_default();
         if (evr != ESP_OK && evr != ESP_ERR_INVALID_STATE) {
-            ESP_ERROR_CHECK(evr);
+            return evr;
         }
-        esp_netif_create_default_wifi_sta();
+        if (!esp_netif_create_default_wifi_sta()) return ESP_ERR_NO_MEM;
         s_netif_inited = true;
     }
 
@@ -177,7 +196,7 @@ static esp_err_t wifi_connect_blocking(void)
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         esp_err_t wr = esp_wifi_init(&cfg);
         if (wr != ESP_OK && wr != ESP_ERR_INVALID_STATE) {
-            ESP_ERROR_CHECK(wr);
+            return wr;
         }
         s_wifi_driver_inited = true;
     }
@@ -186,22 +205,27 @@ static esp_err_t wifi_connect_blocking(void)
     if (!s_wifi_handlers_registered) {
         esp_event_handler_instance_t instance_any_id;
         esp_event_handler_instance_t instance_got_ip;
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                            ESP_EVENT_ANY_ID,
-                                                            &wifi_event_handler,
-                                                            NULL,
-                                                            &instance_any_id));
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                            IP_EVENT_STA_GOT_IP,
-                                                            &wifi_event_handler,
-                                                            NULL,
-                                                            &instance_got_ip));
+        result = esp_event_handler_instance_register(WIFI_EVENT,
+                                                     ESP_EVENT_ANY_ID,
+                                                     &wifi_event_handler,
+                                                     NULL,
+                                                     &instance_any_id);
+        if (result != ESP_OK) return result;
+        result = esp_event_handler_instance_register(IP_EVENT,
+                                                     IP_EVENT_STA_GOT_IP,
+                                                     &wifi_event_handler,
+                                                     NULL,
+                                                     &instance_got_ip);
+        if (result != ESP_OK) return result;
         s_wifi_handlers_registered = true;
     }
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(wifi_apply_runtime_config());
-    ESP_ERROR_CHECK(esp_wifi_start());
+    result = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (result != ESP_OK) return result;
+    result = wifi_apply_runtime_config();
+    if (result != ESP_OK) return result;
+    result = esp_wifi_start();
+    if (result != ESP_OK) return result;
     s_wifi_started = true;
 
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
@@ -228,14 +252,16 @@ static bool app_sntp_sync_time(void)
     const int retry_count = 15;
 
     while (timeinfo.tm_year < (2024 - 1900) && ++retry <= retry_count) {
+        EventBits_t bits = s_wifi_event_group ? xEventGroupGetBits(s_wifi_event_group) : 0;
+        if (!(bits & WIFI_CONNECTED_BIT)) {
+            esp_sntp_stop();
+            return false;
+        }
         ESP_LOGI(TAG, "Esperando hora NTP... (%d/%d)", retry, retry_count);
         vTaskDelay(pdMS_TO_TICKS(2000));
         time(&now);
         localtime_r(&now, &timeinfo);
     }
-
-    setenv("TZ", CONFIG_IAWICHU_TZ, 1);
-    tzset();
 
     char strftime_buf[64];
     if (timeinfo.tm_year >= (2024 - 1900)) {
@@ -251,72 +277,95 @@ static bool app_sntp_sync_time(void)
 static void wifi_reconnect_and_sync_task(void *arg)
 {
     (void)arg;
+    bool time_synced = false;
+
     while (1) {
+        if (strlen(s_wifi_ssid) == 0) {
+            ui_clock_set_network_state(false, false);
+            vTaskDelay(pdMS_TO_TICKS(30000));
+            continue;
+        }
+
         if (!s_wifi_started) {
-            if (wifi_connect_blocking() == ESP_OK) {
-                s_time_synced = app_sntp_sync_time();
-            }
+            wifi_connect_blocking();
         } else {
             EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
-            if (!(bits & WIFI_CONNECTED_BIT)) {
-                xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
-                s_time_synced = false;
-                esp_wifi_disconnect();
-                esp_wifi_connect();
+            if (!(bits & WIFI_CONNECTED_BIT) && (bits & WIFI_FAIL_BIT)) {
+                xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
+                time_synced = false;
+                atomic_store_explicit(&s_wifi_retry_num, 0, memory_order_release);
+                esp_err_t result = esp_wifi_connect();
+                if (result != ESP_OK) {
+                    ESP_LOGE(TAG, "WiFi nuevo ciclo falló: %s", esp_err_to_name(result));
+                    xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+                }
                 EventBits_t retry_bits = xEventGroupWaitBits(s_wifi_event_group,
                                                              WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
                                                              pdFALSE,
                                                              pdFALSE,
                                                              pdMS_TO_TICKS(12000));
-                if (retry_bits & WIFI_CONNECTED_BIT) {
-                    s_time_synced = app_sntp_sync_time();
-                }
+                (void)retry_bits;
             }
         }
 
         EventBits_t bits_now = s_wifi_event_group ? xEventGroupGetBits(s_wifi_event_group) : 0;
-        if ((bits_now & WIFI_CONNECTED_BIT) && !s_time_synced) {
-            s_time_synced = app_sntp_sync_time();
+        bool connected = (bits_now & WIFI_CONNECTED_BIT) != 0;
+        if (!connected) {
+            time_synced = false;
+            ui_clock_set_network_state(false, false);
+        } else if (!time_synced) {
+            ui_clock_set_network_state(true, false);
+            bool synced = app_sntp_sync_time();
+            EventBits_t bits_after = xEventGroupGetBits(s_wifi_event_group);
+            connected = (bits_after & WIFI_CONNECTED_BIT) != 0;
+            time_synced = connected && synced;
+            ui_clock_set_network_state(connected, time_synced);
+        } else {
+            ui_clock_set_network_state(true, true);
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
-static void ui_wifi_save_handler(const char *ssid, const char *pass)
+static void ui_gesture_request_handler(const gesture_profile_t *profile)
 {
-    if (!ssid) return;
-    strlcpy(s_wifi_ssid, ssid, sizeof(s_wifi_ssid));
-    strlcpy(s_wifi_pass, pass ? pass : "", sizeof(s_wifi_pass));
-
-    ESP_LOGI(TAG, "Credenciales WiFi actualizadas desde UI (ssid=%s)", s_wifi_ssid);
-
-    if (s_wifi_started) {
-        ESP_ERROR_CHECK(wifi_apply_runtime_config());
-        s_time_synced = false;
-        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
-        esp_wifi_disconnect();
-        esp_wifi_connect();
-    }
+    if (!profile) return;
+    ESP_LOGI(TAG, "Gesto preview %s (%s), sin salida a motores", profile->name, profile->code);
 }
 
 void app_main(void)
 {
+    setenv("TZ", CONFIG_IAWICHU_TZ, 1);
+    tzset();
+
     lv_display_t *d = display_st7789_lvgl_init();
     if (!d) return;
 
-    /* Pantalla fija volteada para evitar conflictos de rotación dinámica */
+    /* Orientación física inicial; las rotaciones posteriores se encolan a LVGL. */
     display_st7789_set_rotation(DISP_ROT_180);
 
     ui_clock_create();
+    ui_clock_set_gesture_request_callback(ui_gesture_request_handler);
 
     wifi_fill_runtime_from_config();
-    ui_clock_prefill_wifi(s_wifi_ssid, s_wifi_pass);
-    ui_clock_set_wifi_callback(ui_wifi_save_handler);
 
-    xTaskCreate(lvgl_task, "lvgl", 8192, NULL, 5, NULL);
-    xTaskCreate(imu_task,  "imu",  3072, NULL, 4, NULL);
-    xTaskCreate(wifi_reconnect_and_sync_task, "wifi_ntp", 6144, NULL, 4, NULL);
+    if (xTaskCreate(lvgl_task, "lvgl", 8192, NULL, 5, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "No se pudo iniciar la tarea LVGL");
+        return;
+    }
+    if (xTaskCreate(imu_task, "imu", 3072, NULL, 4, NULL) != pdPASS) {
+        ESP_LOGW(TAG, "Sin tarea IMU; la interfaz continúa en orientación fija");
+        ui_clock_set_accel(0, 0, false);
+    }
+    if (strlen(s_wifi_ssid) > 0) {
+        if (xTaskCreate(wifi_reconnect_and_sync_task, "wifi_ntp", 6144, NULL, 4, NULL) != pdPASS) {
+            ESP_LOGW(TAG, "Sin tarea WiFi/NTP; reloj en modo local/uptime");
+            ui_clock_set_network_state(false, false);
+        }
+    } else {
+        ESP_LOGI(TAG, "WiFi sin configurar; reloj en modo local/uptime");
+    }
 
-    ESP_LOGI(TAG, "OK: reloj + touch + pantalla fija + WiFi/NTP.");
+    ESP_LOGI(TAG, "OK: NERVE OS + touch + auto-rotacion segura + WiFi/NTP.");
 }
