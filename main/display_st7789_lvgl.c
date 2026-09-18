@@ -151,6 +151,54 @@ static lv_display_t *s_disp = NULL;
 static atomic_uchar s_rot = DISP_ROT_0;
 static QueueHandle_t s_rotation_queue = NULL;
 
+typedef struct {
+    bool swap;
+    bool mirror_x;
+    bool mirror_y;
+    int width;
+    int height;
+    int gap_x;
+    int gap_y;
+} panel_rotation_config_t;
+
+static bool panel_rotation_config(disp_rot_t rot, panel_rotation_config_t *config)
+{
+    if (!config) return false;
+
+    switch (rot) {
+        case DISP_ROT_0:
+            *config = (panel_rotation_config_t){false, false, false,
+                                                LCD_H_RES, LCD_V_RES, LCD_X_GAP, LCD_Y_GAP};
+            return true;
+        case DISP_ROT_90:
+            *config = (panel_rotation_config_t){true, true, false,
+                                                LCD_V_RES, LCD_H_RES, LCD_Y_GAP, LCD_X_GAP};
+            return true;
+        case DISP_ROT_180:
+            *config = (panel_rotation_config_t){false, true, true,
+                                                LCD_H_RES, LCD_V_RES, LCD_X_GAP, LCD_Y_GAP};
+            return true;
+        case DISP_ROT_270:
+            *config = (panel_rotation_config_t){true, false, true,
+                                                LCD_V_RES, LCD_H_RES, LCD_Y_GAP, LCD_X_GAP};
+            return true;
+        default:
+            return false;
+    }
+}
+
+static esp_err_t panel_apply_rotation(const panel_rotation_config_t *config)
+{
+    esp_err_t result = esp_lcd_panel_swap_xy(s_panel, config->swap);
+    if (result == ESP_OK) {
+        result = esp_lcd_panel_mirror(s_panel, config->mirror_x, config->mirror_y);
+    }
+    if (result == ESP_OK) {
+        result = esp_lcd_panel_set_gap(s_panel, config->gap_x, config->gap_y);
+    }
+    return result;
+}
+
 /* DMA done -> LVGL flush ready */
 static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
                                     esp_lcd_panel_io_event_data_t *edata,
@@ -333,6 +381,9 @@ void display_st7789_request_rotation(disp_rot_t rot)
 
 bool display_st7789_service(void)
 {
+    static disp_rot_t retry_target = DISP_ROT_0;
+    static uint8_t retry_count = 0;
+
     if (!s_rotation_queue) return false;
 
     disp_rot_t current = display_st7789_get_rotation();
@@ -341,55 +392,57 @@ bool display_st7789_service(void)
         return false;
     }
     if (requested == current) {
+        retry_count = 0;
         return false;
     }
 
-    display_st7789_set_rotation(requested);
-    return true;
+    if (display_st7789_set_rotation(requested)) {
+        retry_count = 0;
+        return true;
+    }
+
+    if (requested != retry_target) retry_count = 0;
+    retry_target = requested;
+    if (++retry_count < 3U) {
+        /* Una solicitud IMU más nueva siempre gana sobre este reintento. */
+        if (xQueueSend(s_rotation_queue, &requested, 0) != pdTRUE) {
+            retry_count = 0;
+        }
+    } else {
+        ESP_LOGE(TAG, "Rotación %d cancelada tras %u intentos", (int)requested,
+                 (unsigned)retry_count);
+        retry_count = 0;
+    }
+    return false;
 }
 
-void display_st7789_set_rotation(disp_rot_t rot)
+bool display_st7789_set_rotation(disp_rot_t rot)
 {
-    if (!s_panel || !s_disp) return;
-    if (rot == display_st7789_get_rotation()) return;
+    if (!s_panel || !s_disp) return false;
 
-    bool swap = false, mx = false, my = false;
-    int w = LCD_H_RES, h = LCD_V_RES;
-    int gap_x = LCD_X_GAP, gap_y = LCD_Y_GAP;
+    disp_rot_t current = display_st7789_get_rotation();
+    if (rot == current) return true;
 
-    switch (rot) {
-        case DISP_ROT_0:
-            swap=false; mx=false; my=false;
-            w=LCD_H_RES; h=LCD_V_RES;
-            gap_x=LCD_X_GAP; gap_y=LCD_Y_GAP;
-            break;
-        case DISP_ROT_90:
-            swap=true;  mx=true;  my=false;
-            w=LCD_V_RES; h=LCD_H_RES;
-            gap_x=LCD_Y_GAP; gap_y=LCD_X_GAP;
-            break;
-        case DISP_ROT_180:
-            swap=false; mx=true;  my=true;
-            w=LCD_H_RES; h=LCD_V_RES;
-            gap_x=LCD_X_GAP; gap_y=LCD_Y_GAP;
-            break;
-        case DISP_ROT_270:
-            swap=true;  mx=false; my=true;
-            w=LCD_V_RES; h=LCD_H_RES;
-            gap_x=LCD_Y_GAP; gap_y=LCD_X_GAP;
-            break;
+    panel_rotation_config_t target_config;
+    panel_rotation_config_t current_config;
+    if (!panel_rotation_config(rot, &target_config) ||
+        !panel_rotation_config(current, &current_config)) {
+        return false;
     }
 
-    esp_err_t result = esp_lcd_panel_swap_xy(s_panel, swap);
-    if (result == ESP_OK) result = esp_lcd_panel_mirror(s_panel, mx, my);
-    if (result == ESP_OK) result = esp_lcd_panel_set_gap(s_panel, gap_x, gap_y);
+    esp_err_t result = panel_apply_rotation(&target_config);
     if (result != ESP_OK) {
         ESP_LOGE(TAG, "Rotación %d falló: %s", (int)rot, esp_err_to_name(result));
-        return;
+        esp_err_t rollback = panel_apply_rotation(&current_config);
+        if (rollback != ESP_OK) {
+            ESP_LOGE(TAG, "Rollback de rotación falló: %s", esp_err_to_name(rollback));
+        }
+        return false;
     }
 
-    lv_display_set_resolution(s_disp, w, h);
+    lv_display_set_resolution(s_disp, target_config.width, target_config.height);
     atomic_store_explicit(&s_rot, (unsigned char)rot, memory_order_release);
     lv_obj_update_layout(lv_screen_active());
     lv_obj_invalidate(lv_screen_active());
+    return true;
 }

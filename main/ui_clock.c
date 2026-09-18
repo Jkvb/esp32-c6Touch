@@ -127,9 +127,11 @@ static size_t s_gesture_selected;
 static bool s_gesture_has_selection;
 static ui_gesture_request_cb_t s_gesture_cb;
 
+#define UI_NET_CONNECTED 0x01U
+#define UI_NET_TIME_SYNCED 0x02U
+
 static atomic_bool s_imu_valid;
-static atomic_bool s_network_connected;
-static atomic_bool s_time_synced;
+static atomic_uchar s_network_state;
 
 static uint8_t s_active_page;
 static uint8_t s_theme_idx;
@@ -640,8 +642,9 @@ static void update_status(void)
 {
     bool touch_ok = display_st7789_touch_ready();
     bool imu_ok = atomic_load_explicit(&s_imu_valid, memory_order_acquire);
-    bool net_ok = atomic_load_explicit(&s_network_connected, memory_order_acquire);
-    bool time_synced = atomic_load_explicit(&s_time_synced, memory_order_acquire);
+    uint8_t network_state = atomic_load_explicit(&s_network_state, memory_order_acquire);
+    bool net_ok = (network_state & UI_NET_CONNECTED) != 0U;
+    bool time_synced = (network_state & UI_NET_TIME_SYNCED) != 0U;
     time_t now = 0;
     struct tm time_info = {0};
     time(&now);
@@ -677,7 +680,8 @@ static void update_clock(void)
 
     uint64_t uptime_s = (uint64_t)esp_timer_get_time() / 1000000ULL;
     bool wall_clock_valid = time_info.tm_year >= (2024 - 1900);
-    bool time_synced = atomic_load_explicit(&s_time_synced, memory_order_acquire);
+    uint8_t network_state = atomic_load_explicit(&s_network_state, memory_order_acquire);
+    bool time_synced = (network_state & UI_NET_TIME_SYNCED) != 0U;
     int second = wall_clock_valid ? time_info.tm_sec : (int)(uptime_s % 60ULL);
     if (second == s_last_second) return;
     s_last_second = second;
@@ -868,8 +872,9 @@ void ui_clock_set_accel(int16_t x, int16_t y, bool valid)
 
 void ui_clock_set_network_state(bool connected, bool time_synced)
 {
-    atomic_store_explicit(&s_network_connected, connected, memory_order_release);
-    atomic_store_explicit(&s_time_synced, time_synced, memory_order_release);
+    uint8_t state = connected ? UI_NET_CONNECTED : 0U;
+    if (connected && time_synced) state |= UI_NET_TIME_SYNCED;
+    atomic_store_explicit(&s_network_state, state, memory_order_release);
 }
 
 void ui_clock_set_gesture_request_callback(ui_gesture_request_cb_t cb)

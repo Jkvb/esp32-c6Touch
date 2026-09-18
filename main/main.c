@@ -25,9 +25,8 @@ static const char *TAG = "IAWICHU";
 #define WIFI_MAX_RETRIES   8
 
 static EventGroupHandle_t s_wifi_event_group = NULL;
-static int s_wifi_retry_num = 0;
+static atomic_int s_wifi_retry_num = 0;
 static bool s_wifi_started = false;
-static atomic_bool s_time_synced = false;
 static char s_wifi_ssid[33] = {0};
 static char s_wifi_pass[65] = {0};
 
@@ -117,20 +116,19 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 {
     (void)arg;
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        s_wifi_retry_num = 0;
+        atomic_store_explicit(&s_wifi_retry_num, 0, memory_order_release);
         xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
         if (esp_wifi_connect() != ESP_OK) {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-        atomic_store_explicit(&s_time_synced, false, memory_order_release);
-        ui_clock_set_network_state(false, false);
-        if (s_wifi_retry_num < WIFI_MAX_RETRIES) {
+        int retry_count = atomic_load_explicit(&s_wifi_retry_num, memory_order_acquire);
+        if (retry_count < WIFI_MAX_RETRIES) {
             esp_err_t result = esp_wifi_connect();
             if (result == ESP_OK) {
-                s_wifi_retry_num++;
-                ESP_LOGW(TAG, "WiFi reconectando (%d/%d)", s_wifi_retry_num, WIFI_MAX_RETRIES);
+                int attempt = atomic_fetch_add_explicit(&s_wifi_retry_num, 1, memory_order_acq_rel) + 1;
+                ESP_LOGW(TAG, "WiFi reconectando (%d/%d)", attempt, WIFI_MAX_RETRIES);
             } else {
                 ESP_LOGE(TAG, "WiFi reconnect falló: %s", esp_err_to_name(result));
                 xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
@@ -138,16 +136,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         } else {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
             ESP_LOGE(TAG, "WiFi no pudo conectar");
-            atomic_store_explicit(&s_time_synced, false, memory_order_release);
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "WiFi conectado, IP=" IPSTR, IP2STR(&event->ip_info.ip));
-        s_wifi_retry_num = 0;
+        atomic_store_explicit(&s_wifi_retry_num, 0, memory_order_release);
         xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-        atomic_store_explicit(&s_time_synced, false, memory_order_release);
-        ui_clock_set_network_state(true, false);
     }
 }
 
@@ -257,6 +252,11 @@ static bool app_sntp_sync_time(void)
     const int retry_count = 15;
 
     while (timeinfo.tm_year < (2024 - 1900) && ++retry <= retry_count) {
+        EventBits_t bits = s_wifi_event_group ? xEventGroupGetBits(s_wifi_event_group) : 0;
+        if (!(bits & WIFI_CONNECTED_BIT)) {
+            esp_sntp_stop();
+            return false;
+        }
         ESP_LOGI(TAG, "Esperando hora NTP... (%d/%d)", retry, retry_count);
         vTaskDelay(pdMS_TO_TICKS(2000));
         time(&now);
@@ -277,6 +277,8 @@ static bool app_sntp_sync_time(void)
 static void wifi_reconnect_and_sync_task(void *arg)
 {
     (void)arg;
+    bool time_synced = false;
+
     while (1) {
         if (strlen(s_wifi_ssid) == 0) {
             ui_clock_set_network_state(false, false);
@@ -285,17 +287,13 @@ static void wifi_reconnect_and_sync_task(void *arg)
         }
 
         if (!s_wifi_started) {
-            if (wifi_connect_blocking() == ESP_OK) {
-                bool synced = app_sntp_sync_time();
-                atomic_store_explicit(&s_time_synced, synced, memory_order_release);
-                ui_clock_set_network_state(true, synced);
-            }
+            wifi_connect_blocking();
         } else {
             EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
             if (!(bits & WIFI_CONNECTED_BIT) && (bits & WIFI_FAIL_BIT)) {
                 xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
-                atomic_store_explicit(&s_time_synced, false, memory_order_release);
-                s_wifi_retry_num = 0;
+                time_synced = false;
+                atomic_store_explicit(&s_wifi_retry_num, 0, memory_order_release);
                 esp_err_t result = esp_wifi_connect();
                 if (result != ESP_OK) {
                     ESP_LOGE(TAG, "WiFi nuevo ciclo falló: %s", esp_err_to_name(result));
@@ -306,20 +304,24 @@ static void wifi_reconnect_and_sync_task(void *arg)
                                                              pdFALSE,
                                                              pdFALSE,
                                                              pdMS_TO_TICKS(12000));
-                if (retry_bits & WIFI_CONNECTED_BIT) {
-                    bool synced = app_sntp_sync_time();
-                    atomic_store_explicit(&s_time_synced, synced, memory_order_release);
-                    ui_clock_set_network_state(true, synced);
-                }
+                (void)retry_bits;
             }
         }
 
         EventBits_t bits_now = s_wifi_event_group ? xEventGroupGetBits(s_wifi_event_group) : 0;
-        if ((bits_now & WIFI_CONNECTED_BIT) &&
-            !atomic_load_explicit(&s_time_synced, memory_order_acquire)) {
+        bool connected = (bits_now & WIFI_CONNECTED_BIT) != 0;
+        if (!connected) {
+            time_synced = false;
+            ui_clock_set_network_state(false, false);
+        } else if (!time_synced) {
+            ui_clock_set_network_state(true, false);
             bool synced = app_sntp_sync_time();
-            atomic_store_explicit(&s_time_synced, synced, memory_order_release);
-            ui_clock_set_network_state(true, synced);
+            EventBits_t bits_after = xEventGroupGetBits(s_wifi_event_group);
+            connected = (bits_after & WIFI_CONNECTED_BIT) != 0;
+            time_synced = connected && synced;
+            ui_clock_set_network_state(connected, time_synced);
+        } else {
+            ui_clock_set_network_state(true, true);
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000));
