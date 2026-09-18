@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -16,6 +17,7 @@
 #include "driver/gpio.h"
 #include "driver/i2c.h"
 
+#include "board_i2c.h"
 #include "ui_clock.h"
 
 static const char *TAG = "DISP";
@@ -45,43 +47,14 @@ static const char *TAG = "DISP";
 static esp_timer_handle_t s_lv_tick_timer;
 
 /* Touch (CST816S) */
-#define TOUCH_I2C_PORT      I2C_NUM_0
-#define TOUCH_PIN_SCL       8
-#define TOUCH_PIN_SDA       18
-#define TOUCH_I2C_FREQ_HZ   400000
 #define TOUCH_ADDR_CST816   0x15
 
 static bool s_touch_inited = false;
 static lv_indev_t *s_touch_indev = NULL;
 
-static esp_err_t touch_i2c_init_once(void)
-{
-    static bool i2c_inited = false;
-    if (i2c_inited) return ESP_OK;
-
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = TOUCH_PIN_SDA,
-        .scl_io_num = TOUCH_PIN_SCL,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = TOUCH_I2C_FREQ_HZ,
-    };
-    ESP_ERROR_CHECK(i2c_param_config(TOUCH_I2C_PORT, &conf));
-    esp_err_t r = i2c_driver_install(TOUCH_I2C_PORT, conf.mode, 0, 0, 0);
-    if (r != ESP_OK && r != ESP_ERR_INVALID_STATE) {
-        return r;
-    }
-
-    i2c_inited = true;
-    ESP_LOGI(TAG, "I2C touch listo: SDA=%d SCL=%d", TOUCH_PIN_SDA, TOUCH_PIN_SCL);
-    return ESP_OK;
-}
-
 static esp_err_t touch_rd(uint8_t reg, uint8_t *buf, size_t len)
 {
-    return i2c_master_write_read_device(TOUCH_I2C_PORT, TOUCH_ADDR_CST816,
-                                        &reg, 1, buf, len, pdMS_TO_TICKS(30));
+    return board_i2c_read_reg(TOUCH_ADDR_CST816, reg, buf, len, pdMS_TO_TICKS(30));
 }
 
 static esp_err_t touch_probe(void)
@@ -101,7 +74,7 @@ static void touch_scan_bus(void)
         i2c_master_start(cmd);
         i2c_master_write_byte(cmd, (uint8_t)((addr << 1) | I2C_MASTER_WRITE), true);
         i2c_master_stop(cmd);
-        esp_err_t r = i2c_master_cmd_begin(TOUCH_I2C_PORT, cmd, pdMS_TO_TICKS(10));
+        esp_err_t r = i2c_master_cmd_begin(BOARD_I2C_PORT, cmd, pdMS_TO_TICKS(10));
         i2c_cmd_link_delete(cmd);
 
         if (r == ESP_OK) {
@@ -110,7 +83,8 @@ static void touch_scan_bus(void)
         }
     }
     if (found == 0) {
-        ESP_LOGW(TAG, "I2C scan: no se detectaron dispositivos en SDA=%d/SCL=%d", TOUCH_PIN_SDA, TOUCH_PIN_SCL);
+        ESP_LOGW(TAG, "I2C scan: no se detectaron dispositivos en SDA=%d/SCL=%d",
+                 BOARD_I2C_SDA_GPIO, BOARD_I2C_SCL_GPIO);
     }
 }
 
@@ -143,16 +117,16 @@ static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 
     switch (rot) {
         case DISP_ROT_90:
-            tx = (int16_t)(LCD_H_RES - 1 - y);
-            ty = x;
+            tx = y;
+            ty = (int16_t)(LCD_H_RES - 1 - x);
             break;
         case DISP_ROT_180:
             tx = (int16_t)(LCD_H_RES - 1 - x);
             ty = (int16_t)(LCD_V_RES - 1 - y);
             break;
         case DISP_ROT_270:
-            tx = y;
-            ty = (int16_t)(LCD_V_RES - 1 - x);
+            tx = (int16_t)(LCD_V_RES - 1 - y);
+            ty = x;
             break;
         case DISP_ROT_0:
         default:
@@ -164,8 +138,14 @@ static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 
     if (x < 0) x = 0;
     if (y < 0) y = 0;
-    if (x > (LCD_H_RES - 1)) x = (LCD_H_RES - 1);
-    if (y > (LCD_V_RES - 1)) y = (LCD_V_RES - 1);
+    int16_t max_x = (rot == DISP_ROT_90 || rot == DISP_ROT_270)
+                        ? (LCD_V_RES - 1)
+                        : (LCD_H_RES - 1);
+    int16_t max_y = (rot == DISP_ROT_90 || rot == DISP_ROT_270)
+                        ? (LCD_H_RES - 1)
+                        : (LCD_V_RES - 1);
+    if (x > max_x) x = max_x;
+    if (y > max_y) y = max_y;
 
     data->state = LV_INDEV_STATE_PRESSED;
     data->point.x = x;
@@ -176,6 +156,7 @@ static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 static esp_lcd_panel_handle_t s_panel = NULL;
 static lv_display_t *s_disp = NULL;
 static disp_rot_t s_rot = DISP_ROT_0;
+static QueueHandle_t s_rotation_queue = NULL;
 
 /* DMA done -> LVGL flush ready */
 static bool notify_lvgl_flush_ready(esp_lcd_panel_io_handle_t panel_io,
@@ -287,7 +268,7 @@ lv_display_t* display_st7789_lvgl_init(void)
 
     lv_display_set_buffers(disp, buf, NULL, buf_sz, LV_DISPLAY_RENDER_MODE_PARTIAL);
 
-    if (touch_i2c_init_once() == ESP_OK && touch_probe() == ESP_OK) {
+    if (board_i2c_init() == ESP_OK && touch_probe() == ESP_OK) {
         s_touch_indev = lv_indev_create();
         lv_indev_set_type(s_touch_indev, LV_INDEV_TYPE_POINTER);
         lv_indev_set_read_cb(s_touch_indev, touch_read_cb);
@@ -313,6 +294,10 @@ lv_display_t* display_st7789_lvgl_init(void)
     s_panel = panel_handle;
     s_disp  = disp;
     s_rot   = DISP_ROT_0;
+    s_rotation_queue = xQueueCreate(1, sizeof(disp_rot_t));
+    if (!s_rotation_queue) {
+        ESP_LOGW(TAG, "Sin cola de rotacion: la pantalla queda en orientacion fija");
+    }
 
     ESP_LOGI(TAG, "Display + LVGL listo (%dx%d), gap(%d,%d), touch=%s.",
              LCD_H_RES, LCD_V_RES, LCD_X_GAP, LCD_Y_GAP, s_touch_inited ? "OK" : "OFF");
@@ -322,6 +307,33 @@ lv_display_t* display_st7789_lvgl_init(void)
 disp_rot_t display_st7789_get_rotation(void)
 {
     return s_rot;
+}
+
+bool display_st7789_touch_ready(void)
+{
+    return s_touch_inited;
+}
+
+void display_st7789_request_rotation(disp_rot_t rot)
+{
+    if (!s_rotation_queue || rot > DISP_ROT_270) return;
+    xQueueOverwrite(s_rotation_queue, &rot);
+}
+
+bool display_st7789_service(void)
+{
+    if (!s_rotation_queue) return false;
+
+    disp_rot_t requested = s_rot;
+    if (xQueueReceive(s_rotation_queue, &requested, 0) != pdTRUE) {
+        return false;
+    }
+    if (requested == s_rot) {
+        return false;
+    }
+
+    display_st7789_set_rotation(requested);
+    return true;
 }
 
 void display_st7789_set_rotation(disp_rot_t rot)

@@ -43,8 +43,8 @@ static disp_rot_t rot_from_accel(float ax, float ay)
 {
     const float TH = 0.55f;
     if (fabsf(ay) > fabsf(ax)) {
-        if (ay > TH)  return DISP_ROT_0;
-        if (ay < -TH) return DISP_ROT_180;
+        if (ay > TH)  return DISP_ROT_180;
+        if (ay < -TH) return DISP_ROT_0;
     } else {
         if (ax > TH)  return DISP_ROT_270;
         if (ax < -TH) return DISP_ROT_90;
@@ -79,7 +79,8 @@ static void imu_task(void *arg)
 
             if (stable >= 3 && cand != cur) {
                 cur = cand;
-                ESP_LOGI(TAG, "ROT detectada=%d (ax=%.2f ay=%.2f az=%.2f) [auto-rot desactivada]",
+                display_st7789_request_rotation(cur);
+                ESP_LOGI(TAG, "ROT solicitada=%d (ax=%.2f ay=%.2f az=%.2f)",
                          (int)cur, a.ax, a.ay, a.az);
             }
             vTaskDelay(pdMS_TO_TICKS(100));
@@ -115,6 +116,9 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         s_wifi_retry_num = 0;
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        s_time_synced = false;
+        ui_clock_set_network_state(false, false);
         if (s_wifi_retry_num < WIFI_MAX_RETRIES) {
             esp_wifi_connect();
             s_wifi_retry_num++;
@@ -130,6 +134,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         s_wifi_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         s_time_synced = false;
+        ui_clock_set_network_state(true, false);
     }
 }
 
@@ -252,9 +257,16 @@ static void wifi_reconnect_and_sync_task(void *arg)
 {
     (void)arg;
     while (1) {
+        if (strlen(s_wifi_ssid) == 0) {
+            ui_clock_set_network_state(false, false);
+            vTaskDelay(pdMS_TO_TICKS(30000));
+            continue;
+        }
+
         if (!s_wifi_started) {
             if (wifi_connect_blocking() == ESP_OK) {
                 s_time_synced = app_sntp_sync_time();
+                ui_clock_set_network_state(true, s_time_synced);
             }
         } else {
             EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
@@ -270,6 +282,7 @@ static void wifi_reconnect_and_sync_task(void *arg)
                                                              pdMS_TO_TICKS(12000));
                 if (retry_bits & WIFI_CONNECTED_BIT) {
                     s_time_synced = app_sntp_sync_time();
+                    ui_clock_set_network_state(true, s_time_synced);
                 }
             }
         }
@@ -277,27 +290,17 @@ static void wifi_reconnect_and_sync_task(void *arg)
         EventBits_t bits_now = s_wifi_event_group ? xEventGroupGetBits(s_wifi_event_group) : 0;
         if ((bits_now & WIFI_CONNECTED_BIT) && !s_time_synced) {
             s_time_synced = app_sntp_sync_time();
+            ui_clock_set_network_state(true, s_time_synced);
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
-static void ui_wifi_save_handler(const char *ssid, const char *pass)
+static void ui_gesture_request_handler(const gesture_profile_t *profile)
 {
-    if (!ssid) return;
-    strlcpy(s_wifi_ssid, ssid, sizeof(s_wifi_ssid));
-    strlcpy(s_wifi_pass, pass ? pass : "", sizeof(s_wifi_pass));
-
-    ESP_LOGI(TAG, "Credenciales WiFi actualizadas desde UI (ssid=%s)", s_wifi_ssid);
-
-    if (s_wifi_started) {
-        ESP_ERROR_CHECK(wifi_apply_runtime_config());
-        s_time_synced = false;
-        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
-        esp_wifi_disconnect();
-        esp_wifi_connect();
-    }
+    if (!profile) return;
+    ESP_LOGI(TAG, "Gesto preview %s (%s), sin salida a motores", profile->name, profile->code);
 }
 
 void app_main(void)
@@ -305,18 +308,17 @@ void app_main(void)
     lv_display_t *d = display_st7789_lvgl_init();
     if (!d) return;
 
-    /* Pantalla fija volteada para evitar conflictos de rotación dinámica */
+    /* Orientación física inicial; las rotaciones posteriores se encolan a LVGL. */
     display_st7789_set_rotation(DISP_ROT_180);
 
     ui_clock_create();
+    ui_clock_set_gesture_request_callback(ui_gesture_request_handler);
 
     wifi_fill_runtime_from_config();
-    ui_clock_prefill_wifi(s_wifi_ssid, s_wifi_pass);
-    ui_clock_set_wifi_callback(ui_wifi_save_handler);
 
     xTaskCreate(lvgl_task, "lvgl", 8192, NULL, 5, NULL);
     xTaskCreate(imu_task,  "imu",  3072, NULL, 4, NULL);
     xTaskCreate(wifi_reconnect_and_sync_task, "wifi_ntp", 6144, NULL, 4, NULL);
 
-    ESP_LOGI(TAG, "OK: reloj + touch + pantalla fija + WiFi/NTP.");
+    ESP_LOGI(TAG, "OK: NERVE OS + touch + auto-rotacion segura + WiFi/NTP.");
 }

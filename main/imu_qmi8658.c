@@ -4,15 +4,9 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "driver/i2c.h"
-#include "driver/gpio.h"
+#include "board_i2c.h"
 
 static const char *TAG = "IMU";
-
-#define I2C_PORT        I2C_NUM_0
-#define PIN_SCL         8
-#define PIN_SDA         18
-#define I2C_FREQ_HZ     400000
 
 #define QMI_ADDR_1      0x6B
 #define QMI_ADDR_2      0x6A
@@ -26,42 +20,14 @@ static const char *TAG = "IMU";
 
 static uint8_t s_addr = 0;
 
-static esp_err_t i2c_init_once(void)
-{
-    static bool inited = false;
-    if (inited) return ESP_OK;
-
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = PIN_SDA,
-        .scl_io_num = PIN_SCL,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_FREQ_HZ,
-    };
-    ESP_ERROR_CHECK(i2c_param_config(I2C_PORT, &conf));
-    esp_err_t r = i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0);
-    if (r == ESP_OK) {
-        ESP_LOGI(TAG, "I2C driver instalado para IMU");
-    } else if (r == ESP_ERR_INVALID_STATE || r == ESP_FAIL) {
-        ESP_LOGW(TAG, "I2C ya inicializado por otro modulo (r=0x%x), continuo", (unsigned)r);
-    } else {
-        ESP_LOGE(TAG, "i2c_driver_install fallo (r=0x%x)", (unsigned)r);
-        return r;
-    }
-    inited = true;
-    return ESP_OK;
-}
-
 static esp_err_t rd(uint8_t addr, uint8_t reg, void *buf, size_t len)
 {
-    return i2c_master_write_read_device(I2C_PORT, addr, &reg, 1, buf, len, pdMS_TO_TICKS(100));
+    return board_i2c_read_reg(addr, reg, buf, len, pdMS_TO_TICKS(100));
 }
 
 static esp_err_t wr(uint8_t addr, uint8_t reg, uint8_t val)
 {
-    uint8_t d[2] = {reg, val};
-    return i2c_master_write_to_device(I2C_PORT, addr, d, sizeof(d), pdMS_TO_TICKS(100));
+    return board_i2c_write_reg(addr, reg, val, pdMS_TO_TICKS(100));
 }
 
 static bool probe_addr(uint8_t addr, uint8_t *who)
@@ -76,7 +42,7 @@ static bool probe_addr(uint8_t addr, uint8_t *who)
 
 esp_err_t imu_qmi8658_init(void)
 {
-    ESP_ERROR_CHECK(i2c_init_once());
+    ESP_ERROR_CHECK(board_i2c_init());
 
     uint8_t who = 0;
     if (probe_addr(QMI_ADDR_1, &who)) s_addr = QMI_ADDR_1;

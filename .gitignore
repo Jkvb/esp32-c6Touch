@@ -1,4 +1,4 @@
-﻿# ==== ESP-IDF / CMake (generado) ====
+# ESP-IDF / CMake generated files
 /build/
 /sdkconfig
 /sdkconfig.old
@@ -14,27 +14,27 @@
 /dist/
 /bin/
 
-# ==== ESP-IDF Component Manager (generado) ====
+# ESP-IDF Component Manager generated files
 /managed_components/
 /dependencies.lock.tmp
 
-# ==== Local overrides (no subir secretos) ====
+# Local overrides and secrets
 /sdkconfig.defaults.local
 /sdkconfig.secrets
 *.secrets.*
 
-# ==== Logs / temporales ====
+# Logs and temporary files
 *.log
 *.tmp
 *.bak
 *.swp
 .DS_Store
 
-# ==== IDEs ====
+# Editors
 .vscode/
 .idea/
 *.code-workspace
 
-# ==== Python ====
+# Python
 __pycache__/
 *.pyc
