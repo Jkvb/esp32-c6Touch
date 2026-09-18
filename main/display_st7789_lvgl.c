@@ -1,7 +1,9 @@
 #include "display_st7789_lvgl.h"
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -15,7 +17,6 @@
 #include "esp_lcd_panel_ops.h"
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
-#include "driver/i2c.h"
 
 #include "board_i2c.h"
 #include "ui_clock.h"
@@ -38,11 +39,10 @@ static const char *TAG = "DISP";
 #define LCD_V_RES        320
 #define LCD_X_GAP        35
 #define LCD_Y_GAP        0
+#define LCD_DRAW_BUF_LINES 40
 
 /* Si el BL parpadea o no se queda prendido, cambia a 0 (activo-bajo) */
 #define LCD_BL_ACTIVE_HIGH   0
-
-#define LCD_INVERT_COLOR  0
 
 static esp_timer_handle_t s_lv_tick_timer;
 
@@ -54,7 +54,7 @@ static lv_indev_t *s_touch_indev = NULL;
 
 static esp_err_t touch_rd(uint8_t reg, uint8_t *buf, size_t len)
 {
-    return board_i2c_read_reg(TOUCH_ADDR_CST816, reg, buf, len, pdMS_TO_TICKS(30));
+    return board_i2c_read_reg(TOUCH_ADDR_CST816, reg, buf, len, 30);
 }
 
 static esp_err_t touch_probe(void)
@@ -70,14 +70,7 @@ static void touch_scan_bus(void)
 {
     int found = 0;
     for (uint8_t addr = 0x08; addr < 0x78; addr++) {
-        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, (uint8_t)((addr << 1) | I2C_MASTER_WRITE), true);
-        i2c_master_stop(cmd);
-        esp_err_t r = i2c_master_cmd_begin(BOARD_I2C_PORT, cmd, pdMS_TO_TICKS(10));
-        i2c_cmd_link_delete(cmd);
-
-        if (r == ESP_OK) {
+        if (board_i2c_probe(addr, 10) == ESP_OK) {
             ESP_LOGI(TAG, "I2C device encontrado: 0x%02X", addr);
             found++;
         }
@@ -155,7 +148,7 @@ static void touch_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 
 static esp_lcd_panel_handle_t s_panel = NULL;
 static lv_display_t *s_disp = NULL;
-static disp_rot_t s_rot = DISP_ROT_0;
+static atomic_uchar s_rot = DISP_ROT_0;
 static QueueHandle_t s_rotation_queue = NULL;
 
 /* DMA done -> LVGL flush ready */
@@ -180,7 +173,13 @@ static void lvgl_flush_cb(lv_display_t * disp, const lv_area_t * area, uint8_t *
     int x2 = area->x2;
     int y2 = area->y2;
 
-    esp_lcd_panel_draw_bitmap(panel_handle, x1, y1, x2 + 1, y2 + 1, (void *)px_map);
+    esp_err_t result = esp_lcd_panel_draw_bitmap(panel_handle, x1, y1, x2 + 1, y2 + 1,
+                                                 (void *)px_map);
+    if (result != ESP_OK) {
+        ESP_LOGE(TAG, "LCD flush falló: %s", esp_err_to_name(result));
+        /* No habrá callback DMA cuando el envío falla: libera a LVGL aquí. */
+        lv_display_flush_ready(disp);
+    }
 }
 
 static void lv_tick_cb(void *arg)
@@ -209,7 +208,7 @@ lv_display_t* display_st7789_lvgl_init(void)
         .miso_io_num = PIN_NUM_MISO,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
-        .max_transfer_sz = LCD_H_RES * 80 * sizeof(uint16_t),
+        .max_transfer_sz = LCD_V_RES * LCD_DRAW_BUF_LINES * sizeof(uint16_t),
     };
     ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO));
 
@@ -231,6 +230,7 @@ lv_display_t* display_st7789_lvgl_init(void)
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = PIN_NUM_LCD_RST,
         .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
+        .data_endian = LCD_RGB_DATA_ENDIAN_LITTLE,
         .bits_per_pixel = 16,
     };
     ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle));
@@ -245,21 +245,28 @@ lv_display_t* display_st7789_lvgl_init(void)
     /* LVGL */
     lv_init();
     lv_display_t *disp = lv_display_create(LCD_H_RES, LCD_V_RES);
+    if (!disp) {
+        ESP_LOGE(TAG, "No se pudo crear el display LVGL");
+        return NULL;
+    }
     lv_display_set_user_data(disp, panel_handle);
     lv_display_set_flush_cb(disp, lvgl_flush_cb);
 
-#if LV_COLOR_DEPTH == 16
     lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
-#endif
 
-    /* Buffers DMA */
-    size_t dma_free = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
-    size_t bytes_per_line = LCD_H_RES * sizeof(lv_color_t);
-    uint32_t lines = (uint32_t)(dma_free / bytes_per_line);
-    if (lines > 60) lines = 60;
-    if (lines < 10) lines = 10;
+    /* Buffer parcial dimensionado en bytes RGB565 para la anchura máxima rotada. */
+    const uint32_t max_stride = lv_draw_buf_width_to_stride(LCD_V_RES, LV_COLOR_FORMAT_RGB565);
+    const size_t dma_free = heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    uint32_t lines = LCD_DRAW_BUF_LINES;
+    if ((size_t)max_stride * lines > dma_free) {
+        lines = (uint32_t)(dma_free / max_stride);
+    }
+    if (lines == 0) {
+        ESP_LOGE(TAG, "No hay RAM DMA para una línea RGB565 (%" PRIu32 " bytes).", max_stride);
+        return NULL;
+    }
 
-    size_t buf_sz = bytes_per_line * lines;
+    const size_t buf_sz = (size_t)max_stride * lines;
     void *buf = heap_caps_malloc(buf_sz, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
     if (!buf) {
         ESP_LOGE(TAG, "No se pudo reservar RAM DMA (%u bytes).", (unsigned)buf_sz);
@@ -270,10 +277,14 @@ lv_display_t* display_st7789_lvgl_init(void)
 
     if (board_i2c_init() == ESP_OK && touch_probe() == ESP_OK) {
         s_touch_indev = lv_indev_create();
-        lv_indev_set_type(s_touch_indev, LV_INDEV_TYPE_POINTER);
-        lv_indev_set_read_cb(s_touch_indev, touch_read_cb);
-        s_touch_inited = true;
-        ESP_LOGI(TAG, "Touch LVGL listo (CST816)");
+        if (s_touch_indev) {
+            lv_indev_set_type(s_touch_indev, LV_INDEV_TYPE_POINTER);
+            lv_indev_set_read_cb(s_touch_indev, touch_read_cb);
+            s_touch_inited = true;
+            ESP_LOGI(TAG, "Touch LVGL listo (CST816)");
+        } else {
+            ESP_LOGE(TAG, "Touch detectado, pero LVGL no pudo crear el input");
+        }
     } else {
         ESP_LOGW(TAG, "Touch no inicializó. Revisa pins SDA/SCL y addr 0x15.");
         touch_scan_bus();
@@ -293,7 +304,7 @@ lv_display_t* display_st7789_lvgl_init(void)
 
     s_panel = panel_handle;
     s_disp  = disp;
-    s_rot   = DISP_ROT_0;
+    atomic_store_explicit(&s_rot, DISP_ROT_0, memory_order_release);
     s_rotation_queue = xQueueCreate(1, sizeof(disp_rot_t));
     if (!s_rotation_queue) {
         ESP_LOGW(TAG, "Sin cola de rotacion: la pantalla queda en orientacion fija");
@@ -306,7 +317,7 @@ lv_display_t* display_st7789_lvgl_init(void)
 
 disp_rot_t display_st7789_get_rotation(void)
 {
-    return s_rot;
+    return (disp_rot_t)atomic_load_explicit(&s_rot, memory_order_acquire);
 }
 
 bool display_st7789_touch_ready(void)
@@ -324,11 +335,12 @@ bool display_st7789_service(void)
 {
     if (!s_rotation_queue) return false;
 
-    disp_rot_t requested = s_rot;
+    disp_rot_t current = display_st7789_get_rotation();
+    disp_rot_t requested = current;
     if (xQueueReceive(s_rotation_queue, &requested, 0) != pdTRUE) {
         return false;
     }
-    if (requested == s_rot) {
+    if (requested == current) {
         return false;
     }
 
@@ -339,8 +351,7 @@ bool display_st7789_service(void)
 void display_st7789_set_rotation(disp_rot_t rot)
 {
     if (!s_panel || !s_disp) return;
-    if (rot == s_rot) return;
-    s_rot = rot;
+    if (rot == display_st7789_get_rotation()) return;
 
     bool swap = false, mx = false, my = false;
     int w = LCD_H_RES, h = LCD_V_RES;
@@ -369,11 +380,16 @@ void display_st7789_set_rotation(disp_rot_t rot)
             break;
     }
 
-    esp_lcd_panel_swap_xy(s_panel, swap);
-    esp_lcd_panel_mirror(s_panel, mx, my);
-    esp_lcd_panel_set_gap(s_panel, gap_x, gap_y);
+    esp_err_t result = esp_lcd_panel_swap_xy(s_panel, swap);
+    if (result == ESP_OK) result = esp_lcd_panel_mirror(s_panel, mx, my);
+    if (result == ESP_OK) result = esp_lcd_panel_set_gap(s_panel, gap_x, gap_y);
+    if (result != ESP_OK) {
+        ESP_LOGE(TAG, "Rotación %d falló: %s", (int)rot, esp_err_to_name(result));
+        return;
+    }
 
     lv_display_set_resolution(s_disp, w, h);
+    atomic_store_explicit(&s_rot, (unsigned char)rot, memory_order_release);
     lv_obj_update_layout(lv_screen_active());
     lv_obj_invalidate(lv_screen_active());
 }

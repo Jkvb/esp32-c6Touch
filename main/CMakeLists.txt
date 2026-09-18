@@ -7,5 +7,5 @@ idf_component_register(
         "gesture_profiles.c"
         "imu_qmi8658.c"
     INCLUDE_DIRS "."
-    PRIV_REQUIRES esp_timer esp_lcd esp_system driver lvgl esp_event esp_netif esp_wifi nvs_flash lwip
+    PRIV_REQUIRES esp_timer esp_lcd esp_system esp_driver_i2c driver lvgl esp_event esp_netif esp_wifi nvs_flash lwip
 )

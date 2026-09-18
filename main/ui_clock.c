@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdatomic.h>
 #include <string.h>
 #include <time.h>
 
@@ -126,11 +127,9 @@ static size_t s_gesture_selected;
 static bool s_gesture_has_selection;
 static ui_gesture_request_cb_t s_gesture_cb;
 
-static volatile int16_t s_ax;
-static volatile int16_t s_ay;
-static volatile bool s_imu_valid;
-static volatile bool s_network_connected;
-static volatile bool s_time_synced;
+static atomic_bool s_imu_valid;
+static atomic_bool s_network_connected;
+static atomic_bool s_time_synced;
 
 static uint8_t s_active_page;
 static uint8_t s_theme_idx;
@@ -154,6 +153,7 @@ static const ui_theme_t *theme(void)
 static lv_obj_t *make_label(lv_obj_t *parent, const char *text, const lv_font_t *font)
 {
     lv_obj_t *label = lv_label_create(parent);
+    lv_obj_clear_flag(label, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_CLICK_FOCUSABLE | LV_OBJ_FLAG_SCROLLABLE);
     lv_label_set_text(label, text);
     if (font) lv_obj_set_style_text_font(label, font, 0);
     return label;
@@ -163,7 +163,7 @@ static lv_obj_t *make_bare_container(lv_obj_t *parent)
 {
     lv_obj_t *obj = lv_obj_create(parent);
     lv_obj_remove_style_all(obj);
-    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_CLICK_FOCUSABLE);
     return obj;
 }
 
@@ -327,7 +327,7 @@ static void refresh_gesture(bool animate)
     bool selected = s_gesture_has_selection && s_gesture_selected == s_gesture_preview;
     lv_label_set_text(s_apply_btn_lbl, selected ? "PRESET SELECTED" : "SELECT PRESET");
     lv_label_set_text(s_gesture_state_lbl,
-                      selected ? "PREVIEW SAVED // MOTOR OFF" : "SWIPE UP/DOWN // PREVIEW");
+                      selected ? "SAVED // MOTOR OFF" : "SWIPE V // PREVIEW");
 }
 
 static void change_gesture(int delta)
@@ -368,9 +368,11 @@ static void gesture_swipe_cb(lv_event_t *event)
     lv_dir_t direction = lv_indev_get_gesture_dir(indev);
     if (direction == LV_DIR_TOP) {
         change_gesture(1);
+        lv_indev_wait_release(indev);
         lv_event_stop_bubbling(event);
     } else if (direction == LV_DIR_BOTTOM) {
         change_gesture(-1);
+        lv_indev_wait_release(indev);
         lv_event_stop_bubbling(event);
     }
 }
@@ -378,7 +380,7 @@ static void gesture_swipe_cb(lv_event_t *event)
 static void create_core_page(void)
 {
     lv_obj_t *page = s_pages[UI_PAGE_CORE];
-    create_header_and_footer(UI_PAGE_CORE, "IAWICHU // CORE", "NERVE", "01 // CORE");
+    create_header_and_footer(UI_PAGE_CORE, "IA // CORE", "NERVE", "01 // CORE");
 
     lv_obj_add_flag(page, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(page, core_tap_cb, LV_EVENT_SHORT_CLICKED, NULL);
@@ -393,16 +395,17 @@ static void create_core_page(void)
     s_second_lbl = make_label(page, "00 SEC", LV_FONT_DEFAULT);
     lv_obj_set_style_text_letter_space(s_second_lbl, 2, 0);
 
-    s_time_mode_lbl = make_label(page, "UPTIME // T+000:00:00", LV_FONT_DEFAULT);
+    s_time_mode_lbl = make_label(page, "UP // T+000:00:00", LV_FONT_DEFAULT);
     lv_obj_set_style_text_align(s_time_mode_lbl, LV_TEXT_ALIGN_CENTER, 0);
 
     s_core_state_lbl = make_label(page, "TOUCH -- // IMU --", LV_FONT_DEFAULT);
     lv_obj_set_style_text_align(s_core_state_lbl, LV_TEXT_ALIGN_CENTER, 0);
 
-    s_face_hint_lbl = make_label(page, "DOUBLE TAP // CHANGE FACE", LV_FONT_DEFAULT);
+    s_face_hint_lbl = make_label(page, "2X TAP // FACE", LV_FONT_DEFAULT);
     lv_obj_set_style_text_align(s_face_hint_lbl, LV_TEXT_ALIGN_CENTER, 0);
 
     s_second_rail = lv_bar_create(page);
+    lv_obj_clear_flag(s_second_rail, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_CLICK_FOCUSABLE);
     lv_bar_set_range(s_second_rail, 0, 59);
     lv_bar_set_value(s_second_rail, 0, LV_ANIM_OFF);
     lv_obj_set_style_radius(s_second_rail, 0, LV_PART_MAIN);
@@ -417,9 +420,11 @@ static void create_hand_page(void)
 {
     static const char *finger_names[GESTURE_FINGER_COUNT] = {"T", "I", "M", "R", "L"};
     lv_obj_t *page = s_pages[UI_PAGE_HAND];
-    create_header_and_footer(UI_PAGE_HAND, "HAND // GESTURES", "PREVIEW", "02 // HAND");
+    create_header_and_footer(UI_PAGE_HAND, "IA // HAND", "PREVIEW", "02 // HAND");
 
     lv_obj_add_flag(page, LV_OBJ_FLAG_CLICKABLE);
+    /* Detén aquí el bubbling para que el swipe vertical llegue a este callback. */
+    lv_obj_clear_flag(page, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(page, gesture_swipe_cb, LV_EVENT_GESTURE, NULL);
 
     s_hand_card = make_panel(page);
@@ -431,31 +436,33 @@ static void create_hand_page(void)
     s_gesture_hint_lbl = make_label(page, "Neutral hand / safe start", LV_FONT_DEFAULT);
     lv_obj_set_style_text_align(s_gesture_hint_lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(s_gesture_hint_lbl, LV_LABEL_LONG_WRAP);
-    s_gesture_state_lbl = make_label(page, "SWIPE UP/DOWN // PREVIEW", LV_FONT_DEFAULT);
+    s_gesture_state_lbl = make_label(page, "SWIPE V // PREVIEW", LV_FONT_DEFAULT);
     lv_obj_set_style_text_align(s_gesture_state_lbl, LV_TEXT_ALIGN_CENTER, 0);
 
     s_finger_group = make_bare_container(page);
     for (uint8_t i = 0; i < GESTURE_FINGER_COUNT; i++) {
         s_finger_bars[i] = lv_bar_create(s_finger_group);
-        lv_obj_set_size(s_finger_bars[i], 12, 52);
-        lv_obj_set_pos(s_finger_bars[i], (int32_t)i * 23, 0);
+        lv_obj_set_size(s_finger_bars[i], 10, 52);
+        lv_obj_set_pos(s_finger_bars[i], (int32_t)i * 18, 0);
         lv_bar_set_range(s_finger_bars[i], 0, 100);
         lv_obj_set_style_radius(s_finger_bars[i], 1, LV_PART_MAIN);
         lv_obj_set_style_radius(s_finger_bars[i], 1, LV_PART_INDICATOR);
         lv_obj_set_style_anim_duration(s_finger_bars[i], 180, 0);
 
         s_finger_lbls[i] = make_label(s_finger_group, finger_names[i], LV_FONT_DEFAULT);
-        lv_obj_set_pos(s_finger_lbls[i], (int32_t)i * 23 + 2, 56);
+        lv_obj_set_pos(s_finger_lbls[i], (int32_t)i * 18 + 1, 56);
     }
 
     s_prev_btn = lv_button_create(page);
     lv_obj_add_flag(s_prev_btn, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_set_ext_click_area(s_prev_btn, 2);
     s_prev_btn_lbl = make_label(s_prev_btn, "<", LV_FONT_DEFAULT);
     lv_obj_center(s_prev_btn_lbl);
     lv_obj_add_event_cb(s_prev_btn, gesture_arrow_cb, LV_EVENT_SHORT_CLICKED, (void *)(intptr_t)-1);
 
     s_next_btn = lv_button_create(page);
     lv_obj_add_flag(s_next_btn, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_set_ext_click_area(s_next_btn, 2);
     s_next_btn_lbl = make_label(s_next_btn, ">", LV_FONT_DEFAULT);
     lv_obj_center(s_next_btn_lbl);
     lv_obj_add_event_cb(s_next_btn, gesture_arrow_cb, LV_EVENT_SHORT_CLICKED, (void *)(intptr_t)1);
@@ -473,10 +480,10 @@ static void create_hand_page(void)
 static void create_sense_page(void)
 {
     static const char *keys[UI_STATUS_COUNT] = {
-        "TOUCH", "IMU", "CLOCK", "NETWORK", "ROTATION", "HEAP"
+        "TOUCH", "IMU", "CLOCK", "NET", "ROT", "HEAP"
     };
     lv_obj_t *page = s_pages[UI_PAGE_SENSE];
-    create_header_and_footer(UI_PAGE_SENSE, "SENSE // STATUS", "LIVE", "03 // SENSE");
+    create_header_and_footer(UI_PAGE_SENSE, "IA // SENSE", "LIVE", "03 // SENSE");
 
     for (uint8_t i = 0; i < UI_STATUS_COUNT; i++) {
         s_status_rows[i] = make_panel(page);
@@ -490,9 +497,9 @@ static void create_sense_page(void)
 static void layout_common(bool portrait)
 {
     for (uint8_t page = 0; page < UI_PAGE_COUNT; page++) {
-        lv_obj_align(s_header_lbl[page], LV_ALIGN_TOP_LEFT, portrait ? 10 : 8, portrait ? 10 : 4);
-        lv_obj_set_size(s_header_chip[page], portrait ? 57 : 64, portrait ? 22 : 20);
-        lv_obj_align(s_header_chip[page], LV_ALIGN_TOP_RIGHT, portrait ? -8 : -6, portrait ? 7 : 2);
+        lv_obj_align(s_header_lbl[page], LV_ALIGN_TOP_LEFT, portrait ? 4 : 8, portrait ? 10 : 4);
+        lv_obj_set_size(s_header_chip[page], 70, portrait ? 22 : 20);
+        lv_obj_align(s_header_chip[page], LV_ALIGN_TOP_RIGHT, portrait ? -4 : -6, portrait ? 7 : 2);
         lv_obj_align(s_footer_lbl[page], LV_ALIGN_BOTTOM_LEFT, 8, portrait ? -6 : -2);
         for (uint8_t dot = 0; dot < UI_PAGE_COUNT; dot++) {
             lv_obj_align(s_page_dots[page][dot], LV_ALIGN_BOTTOM_RIGHT,
@@ -521,12 +528,12 @@ static void layout_core(bool portrait, int32_t width, int32_t height)
         lv_obj_set_size(s_second_rail, 3, 174);
         lv_obj_align(s_second_rail, LV_ALIGN_LEFT_MID, 8, 1);
     } else {
-        lv_obj_set_size(s_time_row, 160, 56);
-        lv_obj_align(s_time_row, LV_ALIGN_LEFT_MID, 25, -7);
+        lv_obj_set_size(s_time_row, 150, 56);
+        lv_obj_align(s_time_row, LV_ALIGN_LEFT_MID, 12, -7);
         lv_obj_align(s_second_lbl, LV_ALIGN_LEFT_MID, 92, 28);
-        lv_obj_set_width(s_time_mode_lbl, 122);
+        lv_obj_set_width(s_time_mode_lbl, 145);
         lv_obj_set_style_text_align(s_time_mode_lbl, LV_TEXT_ALIGN_RIGHT, 0);
-        lv_obj_align(s_time_mode_lbl, LV_ALIGN_RIGHT_MID, -12, -20);
+        lv_obj_align(s_time_mode_lbl, LV_ALIGN_RIGHT_MID, -8, -20);
         lv_obj_set_width(s_core_state_lbl, 122);
         lv_obj_set_style_text_align(s_core_state_lbl, LV_TEXT_ALIGN_RIGHT, 0);
         lv_obj_align(s_core_state_lbl, LV_ALIGN_RIGHT_MID, -12, 4);
@@ -549,12 +556,12 @@ static void layout_hand(bool portrait)
         lv_obj_set_width(s_gesture_hint_lbl, 142);
         lv_obj_set_style_text_align(s_gesture_hint_lbl, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_align(s_gesture_hint_lbl, LV_ALIGN_TOP_MID, 0, 106);
-        lv_obj_set_size(s_finger_group, 105, 74);
+        lv_obj_set_size(s_finger_group, 84, 74);
         lv_obj_align(s_finger_group, LV_ALIGN_TOP_MID, 0, 140);
-        lv_obj_set_size(s_prev_btn, 34, 38);
-        lv_obj_align(s_prev_btn, LV_ALIGN_LEFT_MID, 10, 17);
-        lv_obj_set_size(s_next_btn, 34, 38);
-        lv_obj_align(s_next_btn, LV_ALIGN_RIGHT_MID, -10, 17);
+        lv_obj_set_size(s_prev_btn, 40, 44);
+        lv_obj_align(s_prev_btn, LV_ALIGN_LEFT_MID, 2, 17);
+        lv_obj_set_size(s_next_btn, 40, 44);
+        lv_obj_align(s_next_btn, LV_ALIGN_RIGHT_MID, -2, 17);
         lv_obj_set_width(s_gesture_state_lbl, 154);
         lv_obj_set_style_text_align(s_gesture_state_lbl, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_align(s_gesture_state_lbl, LV_ALIGN_BOTTOM_MID, 0, -72);
@@ -568,16 +575,16 @@ static void layout_hand(bool portrait)
         lv_obj_set_width(s_gesture_hint_lbl, 125);
         lv_obj_set_style_text_align(s_gesture_hint_lbl, LV_TEXT_ALIGN_LEFT, 0);
         lv_obj_align(s_gesture_hint_lbl, LV_ALIGN_TOP_LEFT, 12, 84);
-        lv_obj_set_size(s_finger_group, 105, 74);
-        lv_obj_align(s_finger_group, LV_ALIGN_TOP_LEFT, 169, 40);
-        lv_obj_set_size(s_prev_btn, 30, 34);
-        lv_obj_align(s_prev_btn, LV_ALIGN_TOP_LEFT, 135, 57);
-        lv_obj_set_size(s_next_btn, 30, 34);
-        lv_obj_align(s_next_btn, LV_ALIGN_TOP_RIGHT, -8, 57);
-        lv_obj_set_width(s_gesture_state_lbl, 132);
+        lv_obj_set_size(s_finger_group, 84, 74);
+        lv_obj_align(s_finger_group, LV_ALIGN_TOP_LEFT, 190, 40);
+        lv_obj_set_size(s_prev_btn, 44, 44);
+        lv_obj_align(s_prev_btn, LV_ALIGN_TOP_LEFT, 142, 55);
+        lv_obj_set_size(s_next_btn, 44, 44);
+        lv_obj_align(s_next_btn, LV_ALIGN_TOP_RIGHT, -2, 55);
+        lv_obj_set_width(s_gesture_state_lbl, 158);
         lv_obj_set_style_text_align(s_gesture_state_lbl, LV_TEXT_ALIGN_LEFT, 0);
-        lv_obj_align(s_gesture_state_lbl, LV_ALIGN_BOTTOM_LEFT, 12, -28);
-        lv_obj_set_size(s_apply_btn, 134, 32);
+        lv_obj_align(s_gesture_state_lbl, LV_ALIGN_BOTTOM_LEFT, 12, -25);
+        lv_obj_set_size(s_apply_btn, 138, 32);
         lv_obj_align(s_apply_btn, LV_ALIGN_BOTTOM_RIGHT, -8, -22);
     }
 }
@@ -622,7 +629,9 @@ static void apply_layout(void)
 static void set_status_value(uint8_t index, const char *value, bool good)
 {
     if (index >= UI_STATUS_COUNT) return;
-    lv_label_set_text(s_status_values[index], value);
+    if (strcmp(lv_label_get_text(s_status_values[index]), value) != 0) {
+        lv_label_set_text(s_status_values[index], value);
+    }
     lv_obj_set_style_text_color(s_status_values[index],
                                 color_hex(good ? theme()->primary : theme()->accent), 0);
 }
@@ -630,14 +639,19 @@ static void set_status_value(uint8_t index, const char *value, bool good)
 static void update_status(void)
 {
     bool touch_ok = display_st7789_touch_ready();
-    bool imu_ok = s_imu_valid;
-    bool net_ok = s_network_connected;
-    bool clock_ok = s_time_synced;
+    bool imu_ok = atomic_load_explicit(&s_imu_valid, memory_order_acquire);
+    bool net_ok = atomic_load_explicit(&s_network_connected, memory_order_acquire);
+    bool time_synced = atomic_load_explicit(&s_time_synced, memory_order_acquire);
+    time_t now = 0;
+    struct tm time_info = {0};
+    time(&now);
+    localtime_r(&now, &time_info);
+    bool wall_clock_valid = time_info.tm_year >= (2024 - 1900);
     char buffer[24];
 
     set_status_value(0, touch_ok ? "ONLINE" : "OFFLINE", touch_ok);
     set_status_value(1, imu_ok ? "ONLINE" : "OFFLINE", imu_ok);
-    set_status_value(2, clock_ok ? "NTP SYNC" : "UPTIME", true);
+    set_status_value(2, time_synced ? "NTP SYNC" : (wall_clock_valid ? "LOCAL" : "UPTIME"), true);
     set_status_value(3, net_ok ? "CONNECTED" : "OFFLINE", net_ok);
 
     static const char *rot_names[] = {"0 DEG", "90 DEG", "180 DEG", "270 DEG"};
@@ -649,7 +663,9 @@ static void update_status(void)
 
     snprintf(buffer, sizeof(buffer), "TOUCH %s // IMU %s",
              touch_ok ? "OK" : "--", imu_ok ? "OK" : "--");
-    lv_label_set_text(s_core_state_lbl, buffer);
+    if (strcmp(lv_label_get_text(s_core_state_lbl), buffer) != 0) {
+        lv_label_set_text(s_core_state_lbl, buffer);
+    }
 }
 
 static void update_clock(void)
@@ -661,6 +677,7 @@ static void update_clock(void)
 
     uint64_t uptime_s = (uint64_t)esp_timer_get_time() / 1000000ULL;
     bool wall_clock_valid = time_info.tm_year >= (2024 - 1900);
+    bool time_synced = atomic_load_explicit(&s_time_synced, memory_order_acquire);
     int second = wall_clock_valid ? time_info.tm_sec : (int)(uptime_s % 60ULL);
     if (second == s_last_second) return;
     s_last_second = second;
@@ -676,14 +693,14 @@ static void update_clock(void)
         snprintf(seconds, sizeof(seconds), "%02d SEC", time_info.tm_sec);
         snprintf(mode, sizeof(mode), "%02d.%02d.%04d // %s",
                  time_info.tm_mday, time_info.tm_mon + 1, time_info.tm_year + 1900,
-                 s_time_synced ? "NTP" : "LOCAL");
+                 time_synced ? "NTP" : "LOCAL");
     } else {
         uint64_t hours = (uptime_s / 3600ULL) % 100ULL;
         uint64_t minutes = (uptime_s / 60ULL) % 60ULL;
         snprintf(hour, sizeof(hour), "%02" PRIu64, hours);
         snprintf(minute, sizeof(minute), "%02" PRIu64, minutes);
         snprintf(seconds, sizeof(seconds), "%02" PRIu64 " SEC", (uint64_t)(uptime_s % 60ULL));
-        snprintf(mode, sizeof(mode), "UPTIME // T+%03" PRIu64 ":%02" PRIu64 ":%02" PRIu64,
+        snprintf(mode, sizeof(mode), "UP // T+%03" PRIu64 ":%02" PRIu64 ":%02" PRIu64,
                  (uint64_t)(uptime_s / 3600ULL), minutes, (uint64_t)(uptime_s % 60ULL));
     }
 
@@ -744,7 +761,7 @@ static void boot_line_anim_cb(void *object, int32_t value)
 static void boot_done_cb(lv_timer_t *timer)
 {
     if (s_boot_overlay) {
-        lv_obj_delete_async(s_boot_overlay);
+        lv_obj_delete(s_boot_overlay);
         s_boot_overlay = NULL;
         s_boot_line = NULL;
     }
@@ -765,10 +782,10 @@ static void create_boot_overlay(void)
 
     lv_obj_t *brand = make_label(s_boot_overlay, "IAWICHU", UI_FONT_TITLE);
     lv_obj_set_style_text_color(brand, color_hex(t->text), 0);
-    lv_obj_set_style_text_letter_space(brand, 3, 0);
+    lv_obj_set_style_text_letter_space(brand, 2, 0);
     lv_obj_align(brand, LV_ALIGN_CENTER, 0, -25);
 
-    lv_obj_t *subtitle = make_label(s_boot_overlay, "NERVE OS // INITIALIZING", LV_FONT_DEFAULT);
+    lv_obj_t *subtitle = make_label(s_boot_overlay, "NERVE OS // BOOT", LV_FONT_DEFAULT);
     lv_obj_set_style_text_color(subtitle, color_hex(t->primary), 0);
     lv_obj_set_style_text_letter_space(subtitle, 1, 0);
     lv_obj_align(subtitle, LV_ALIGN_CENTER, 0, 17);
@@ -788,7 +805,12 @@ static void create_boot_overlay(void)
     lv_anim_set_path_cb(&anim, lv_anim_path_ease_out);
     lv_anim_start(&anim);
 
-    lv_timer_create(boot_done_cb, 950, NULL);
+    if (!lv_timer_create(boot_done_cb, 950, NULL)) {
+        ESP_LOGW(TAG, "Sin timer de boot; ocultando overlay inmediatamente");
+        lv_obj_delete(s_boot_overlay);
+        s_boot_overlay = NULL;
+        s_boot_line = NULL;
+    }
 }
 
 void ui_clock_create(void)
@@ -822,7 +844,9 @@ void ui_clock_create(void)
     update_status();
     lv_tileview_set_tile_by_index(s_tileview, UI_PAGE_CORE, 0, LV_ANIM_OFF);
 
-    lv_timer_create(ui_timer_cb, 100, NULL);
+    if (!lv_timer_create(ui_timer_cb, 100, NULL)) {
+        ESP_LOGE(TAG, "No se pudo crear el timer principal de UI");
+    }
     create_boot_overlay();
 
     ESP_LOGI(TAG, "NERVE OS listo: swipe CORE/HAND/SENSE, doble tap watchface");
@@ -837,15 +861,15 @@ void ui_clock_set_touch_debug(int16_t x, int16_t y, bool pressed)
 
 void ui_clock_set_accel(int16_t x, int16_t y, bool valid)
 {
-    s_ax = x;
-    s_ay = y;
-    s_imu_valid = valid;
+    (void)x;
+    (void)y;
+    atomic_store_explicit(&s_imu_valid, valid, memory_order_release);
 }
 
 void ui_clock_set_network_state(bool connected, bool time_synced)
 {
-    s_network_connected = connected;
-    s_time_synced = time_synced;
+    atomic_store_explicit(&s_network_connected, connected, memory_order_release);
+    atomic_store_explicit(&s_time_synced, time_synced, memory_order_release);
 }
 
 void ui_clock_set_gesture_request_callback(ui_gesture_request_cb_t cb)
